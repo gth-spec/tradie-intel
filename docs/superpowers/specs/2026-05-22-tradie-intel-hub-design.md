@@ -22,8 +22,8 @@ Tradie Intel is the **pilot** for the niche-hub model. If it succeeds, the same 
 
 ### Domain
 
-- Primary: `tradieintel.com.au` (locked in, confirmed available 2026-05-22)
-- Secondary (defensive, optional): `tradieintel.au` redirecting to primary
+- Primary: `tradieintel.com.au` (registered 2026-05-22)
+- Secondary: `tradieintel.au` (registered 2026-05-22) - configured as 301 redirect to primary at DNS/Vercel level
 
 ---
 
