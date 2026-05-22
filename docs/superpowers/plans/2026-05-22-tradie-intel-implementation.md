@@ -6,7 +6,7 @@
 
 **Architecture:** Astro in SSR mode (Vercel adapter) reads from a Supabase `feed_items` table. A daily Vercel cron job hits an internal API route which fetches RSS feeds, enriches new items via the Claude API (summary, "why it matters", relevance score, tags), and writes to Supabase. Email capture posts to a thin provider-abstraction so Kit/Loops/Mailchimp can be swapped without rewriting site code.
 
-**Tech Stack:** Astro 5 + TypeScript + Tailwind CSS, `@astrojs/vercel` adapter (SSR), Supabase JS client, Anthropic SDK (`@anthropic-ai/sdk`), `rss-parser`, Vitest for tests.
+**Tech Stack:** Astro 5 + TypeScript + Tailwind CSS 4 (via `@tailwindcss/vite`), `@astrojs/vercel` v9 adapter (SSR), Supabase JS client, Anthropic SDK (`@anthropic-ai/sdk`), `rss-parser`, Zod for validation, Vitest for tests.
 
 **Spec:** `docs/superpowers/specs/2026-05-22-tradie-intel-hub-design.md`
 
@@ -108,12 +108,13 @@ tradie-intel/
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
-    "@astrojs/tailwind": "^5.1.0",
-    "@astrojs/vercel": "^7.8.0",
+    "@astrojs/vercel": "^9.0.0",
     "@supabase/supabase-js": "^2.45.0",
+    "@tailwindcss/vite": "^4.0.0",
     "astro": "^5.0.0",
     "rss-parser": "^3.13.0",
-    "tailwindcss": "^3.4.0"
+    "tailwindcss": "^4.0.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -150,10 +151,12 @@ Expected: dependencies installed without errors. `node_modules/` and `package-lo
 
 - [ ] **Step 4: Create `astro.config.mjs`**
 
+Tailwind 4 is integrated via the official Vite plugin (the legacy `@astrojs/tailwind` integration is deprecated):
+
 ```javascript
 import { defineConfig } from 'astro/config';
 import vercel from '@astrojs/vercel/serverless';
-import tailwind from '@astrojs/tailwind';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   site: 'https://tradieintel.com.au',
@@ -161,41 +164,26 @@ export default defineConfig({
   adapter: vercel({
     webAnalytics: { enabled: true }
   }),
-  integrations: [tailwind()],
+  vite: {
+    plugins: [tailwindcss()]
+  },
   build: { format: 'directory' }
 });
 ```
 
-- [ ] **Step 5: Create `tailwind.config.mjs`**
+- [ ] **Step 5: Create `src/styles/global.css`**
 
-```javascript
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: ['./src/**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}'],
-  theme: {
-    extend: {
-      colors: {
-        brand: {
-          DEFAULT: '#1e40af',
-          light: '#3b82f6',
-          dark: '#1e3a8a'
-        }
-      },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif']
-      }
-    }
-  },
-  plugins: []
-};
-```
-
-- [ ] **Step 6: Create `src/styles/global.css`**
+Tailwind 4 uses CSS-based theme configuration (no `tailwind.config.mjs` required):
 
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #1e40af;
+  --color-brand-light: #3b82f6;
+  --color-brand-dark: #1e3a8a;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
 
 @layer base {
   html { scroll-behavior: smooth; }
@@ -203,7 +191,9 @@ export default {
 }
 ```
 
-- [ ] **Step 7: Create `src/env.d.ts`**
+Custom utilities (`bg-brand`, `text-brand`, `text-brand-light` etc.) are auto-generated from the `@theme` block.
+
+- [ ] **Step 6: Create `src/env.d.ts`**
 
 ```typescript
 /// <reference types="astro/client" />
@@ -222,7 +212,7 @@ interface ImportMetaEnv {
 interface ImportMeta { readonly env: ImportMetaEnv; }
 ```
 
-- [ ] **Step 8: Create `.gitignore`**
+- [ ] **Step 7: Create `.gitignore`**
 
 ```
 node_modules/
@@ -236,27 +226,36 @@ coverage/
 .DS_Store
 ```
 
-- [ ] **Step 9: Create `.env.example`**
+- [ ] **Step 8: Create `.env.example`**
 
 ```
+# Supabase
 SUPABASE_URL=
 SUPABASE_SERVICE_KEY=
 SUPABASE_ANON_KEY=
+
+# Anthropic
 ANTHROPIC_API_KEY=
+CLAUDE_MODEL=claude-sonnet-4-5-20250929
+
+# Cron auth — generate a random string of at least 32 characters.
+# Suggested: `openssl rand -hex 32` or `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 CRON_SECRET=
-EMAIL_PROVIDER=kit
+
+# Email provider (kit | loops | mailchimp | memory)
+# `memory` is for local dev — captures emails in-memory only, no external call.
+EMAIL_PROVIDER=memory
 EMAIL_PROVIDER_API_KEY=
 EMAIL_LIST_ID=
-CLAUDE_MODEL=claude-sonnet-4-5-20250929
 ```
 
-- [ ] **Step 10: Create `public/favicon.svg`** (placeholder, replace later)
+- [ ] **Step 9: Create `public/favicon.svg`** (placeholder, replace later)
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#1e40af"/><text x="16" y="22" font-family="Arial" font-size="18" font-weight="bold" text-anchor="middle" fill="white">T</text></svg>
 ```
 
-- [ ] **Step 11: Verify dev server starts**
+- [ ] **Step 10: Verify dev server starts**
 
 Run:
 ```bash
@@ -264,11 +263,11 @@ npm run dev
 ```
 Expected: Astro dev server starts on `http://localhost:4321`. Stop with Ctrl+C.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add .
-git commit -m "feat: initialise Astro project with Vercel SSR + Tailwind"
+git commit -m "feat: initialise Astro project with Vercel SSR + Tailwind 4"
 ```
 
 ---
@@ -344,9 +343,13 @@ export const SITE = {
   },
   email: {
     capturePlaceholder: 'your@email.com',
-    ctaButton: 'Subscribe',
-    ctaHeadline: 'Stay ahead in trades',
-    ctaSubhead: 'Daily AI-filtered news for plumbers, electricians and builders.'
+    ctaButton: 'Join the early list',
+    ctaHeadline: 'Be first when the digest launches',
+    // Honest framing: capturing emails only; daily email digest is v2.
+    // Visitors get notified when the daily email goes live, plus practical
+    // AI opportunities for Australian trade operators in the meantime.
+    ctaSubhead: 'Daily trades intel — plus practical AI opportunities for Australian trade operators. We will email you when the daily digest launches.',
+    consentText: 'I agree to receive emails from Tradie Intel and GrokoryAI. I can unsubscribe at any time.'
   }
 };
 ```
@@ -447,13 +450,19 @@ create table feed_items (
   relevance_score int check (relevance_score between 0 and 100),
   tags text[] default '{}',
   slug text not null,
-  created_at timestamptz not null default now(),
-  unique (original_url)
+  created_at timestamptz not null default now()
 );
+
+-- Uniqueness scoped by niche so the same URL or slug could appear once per niche
+-- (defensive for future allied-health expansion sharing this table).
+create unique index feed_items_niche_original_url_unique
+  on feed_items (niche, original_url);
+
+create unique index feed_items_niche_slug_unique
+  on feed_items (niche, slug);
 
 create index feed_items_niche_published_idx on feed_items (niche, published_at desc);
 create index feed_items_niche_relevance_idx on feed_items (niche, relevance_score desc);
-create index feed_items_niche_slug_idx on feed_items (niche, slug);
 create index feed_items_tags_gin on feed_items using gin (tags);
 
 -- RLS: public can read trades items only; service role bypasses RLS for writes.
@@ -630,6 +639,82 @@ git commit -m "feat: add slug generation utility (TDD)"
 
 ---
 
+## Task 6.5: Verify RSS feed sources
+
+Verify each feed URL works **before** writing the RSS fetcher against placeholder URLs.
+
+**Files:**
+- Modify: `src/config/feeds.ts`
+- Create: `scripts/verify-feeds.mjs`
+
+- [ ] **Step 1: Create the verification script**
+
+`scripts/verify-feeds.mjs`:
+```javascript
+import Parser from 'rss-parser';
+import { FEEDS } from '../src/config/feeds.ts';
+
+const parser = new Parser({ timeout: 15_000 });
+const results = [];
+
+for (const feed of FEEDS) {
+  const start = Date.now();
+  try {
+    const data = await parser.parseURL(feed.url);
+    const itemCount = (data.items ?? []).length;
+    const sample = data.items?.[0] ?? {};
+    const hasTitle = typeof sample.title === 'string';
+    const hasLink = typeof sample.link === 'string';
+    const hasDate = !!(sample.isoDate || sample.pubDate);
+    results.push({
+      name: feed.name, url: feed.url, ok: true,
+      items: itemCount, hasTitle, hasLink, hasDate,
+      ms: Date.now() - start,
+    });
+  } catch (err) {
+    results.push({
+      name: feed.name, url: feed.url, ok: false,
+      error: err.message, ms: Date.now() - start,
+    });
+  }
+}
+
+console.table(results);
+
+const broken = results.filter(r => !r.ok);
+if (broken.length > 0) {
+  console.error(`\n${broken.length} feed(s) failed. Disable them in src/config/feeds.ts (enabled: false) before proceeding.`);
+  process.exit(1);
+}
+```
+
+- [ ] **Step 2: Run the script**
+
+```bash
+node scripts/verify-feeds.mjs
+```
+
+Expected: table of all feeds with ok=true, items>0, all three field checks true. If any feed fails or returns 0 items, mark it `enabled: false` in `src/config/feeds.ts` and add a comment with the date verified.
+
+- [ ] **Step 3: Lock in the verified set**
+
+In `src/config/feeds.ts`, add a `last_verified` comment alongside each feed:
+
+```typescript
+{ name: 'Fair Work Ombudsman', url: '...', enabled: true }, // last_verified: 2026-05-22
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/verify-feeds.mjs src/config/feeds.ts
+git commit -m "chore: add feed verification script and lock verified URLs"
+```
+
+**Note:** The BOM severe-weather URL is XML but not strictly RSS - it may need to be excluded from this pipeline and integrated via a separate fetcher later. Drop it if verification fails.
+
+---
+
 ## Task 7: RSS fetcher (TDD)
 
 **Files:**
@@ -800,9 +885,21 @@ Expected: failure.
 `src/lib/claude.ts`:
 ```typescript
 import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
 import { ALLOWED_TAGS, TAG_ALIASES, STATES } from '@/config/tags';
 
 const STATE_SET = new Set<string>(STATES);
+
+// Operational caps - prevents the AI returning paragraphs where a sentence is asked for.
+const MAX_SUMMARY_CHARS = 300;
+const MAX_WHY_CHARS = 150;
+
+const EnrichmentResponseSchema = z.object({
+  summary: z.string().min(1),
+  why_it_matters: z.string().min(1),
+  relevance_score: z.number(),
+  tags: z.array(z.string()).default([])
+});
 
 export interface Enrichment {
   summary: string;
@@ -827,14 +924,19 @@ export function normaliseTags(raw: string[]): string[] {
   return Array.from(out);
 }
 
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1).trimEnd() + '…';
+}
+
 export function enrichmentPrompt({ title, content }: EnrichmentInput): string {
   const tagList = Array.from(ALLOWED_TAGS).join(', ');
   return `You are an editorial assistant for an Australian trades-industry news site. Read the article below and respond with a single JSON object - no prose, no markdown fences.
 
 Required JSON shape:
 {
-  "summary": "2-3 sentence summary written for an Australian tradesperson. Plain English. No marketing language.",
-  "why_it_matters": "ONE sentence explaining the practical impact on a trades operator's day-to-day business.",
+  "summary": "2-3 sentence summary, max 300 characters. Plain English. No marketing language.",
+  "why_it_matters": "ONE sentence, max 150 characters. Practical impact on a trades operator's day-to-day business.",
   "relevance_score": <integer 0-100>,
   "tags": [<2-5 tags from the controlled vocabulary>]
 }
@@ -859,12 +961,17 @@ export async function enrich(input: EnrichmentInput): Promise<Enrichment> {
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map(b => b.text).join('').trim();
 
-  const parsed = JSON.parse(text);
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); }
+  catch { throw new Error(`Claude returned non-JSON: ${text.slice(0, 200)}`); }
+
+  const validated = EnrichmentResponseSchema.parse(parsed);
+
   return {
-    summary: String(parsed.summary ?? '').trim(),
-    whyItMatters: String(parsed.why_it_matters ?? '').trim(),
-    relevanceScore: Math.max(0, Math.min(100, Number(parsed.relevance_score) || 0)),
-    tags: normaliseTags(Array.isArray(parsed.tags) ? parsed.tags.map(String) : [])
+    summary: truncate(validated.summary.trim(), MAX_SUMMARY_CHARS),
+    whyItMatters: truncate(validated.why_it_matters.trim(), MAX_WHY_CHARS),
+    relevanceScore: Math.max(0, Math.min(100, Math.round(validated.relevance_score) || 0)),
+    tags: normaliseTags(validated.tags.map(String))
   };
 }
 ```
@@ -1174,45 +1281,54 @@ import { handleSubscribe } from '@/pages/api/subscribe';
 import { MemoryProvider } from '@/lib/email';
 
 describe('handleSubscribe', () => {
-  it('returns 200 on valid email', async () => {
-    const provider = new MemoryProvider();
-    const req = new Request('http://x/api/subscribe', {
+  function post(body: unknown, headers: Record<string, string> = {}): Request {
+    return new Request('http://x/api/subscribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'a@b.com' })
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body)
     });
-    const res = await handleSubscribe(req, provider);
+  }
+
+  it('returns 200 on valid email with consent', async () => {
+    const provider = new MemoryProvider();
+    const res = await handleSubscribe(post({ email: 'a@b.com', consent: true }), provider);
     expect(res.status).toBe(200);
     expect(provider.list()).toEqual(['a@b.com']);
   });
 
   it('returns 400 on invalid email', async () => {
     const provider = new MemoryProvider();
-    const req = new Request('http://x/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'garbage' })
-    });
-    const res = await handleSubscribe(req, provider);
+    const res = await handleSubscribe(post({ email: 'garbage', consent: true }), provider);
     expect(res.status).toBe(400);
   });
 
-  it('returns 405 on non-POST', async () => {
+  it('returns 400 when consent is missing or false', async () => {
     const provider = new MemoryProvider();
-    const req = new Request('http://x/api/subscribe', { method: 'GET' });
-    const res = await handleSubscribe(req, provider);
-    expect(res.status).toBe(405);
+    const res = await handleSubscribe(post({ email: 'a@b.com' }), provider);
+    expect(res.status).toBe(400);
+  });
+
+  it('silently accepts (200) but does not subscribe when honeypot is filled', async () => {
+    const provider = new MemoryProvider();
+    const res = await handleSubscribe(post({ email: 'a@b.com', consent: true, website: 'http://bot.com' }), provider);
+    expect(res.status).toBe(200);
+    expect(provider.list()).toEqual([]);
   });
 
   it('returns 400 on missing email field', async () => {
     const provider = new MemoryProvider();
-    const req = new Request('http://x/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    const res = await handleSubscribe(req, provider);
+    const res = await handleSubscribe(post({ consent: true }), provider);
     expect(res.status).toBe(400);
+  });
+
+  it('forwards consent metadata to the provider', async () => {
+    const provider = new MemoryProvider();
+    await handleSubscribe(post({
+      email: 'a@b.com', consent: true, source: 'homepage-hero', referrer: 'https://google.com'
+    }), provider);
+    expect(provider.lastMeta()).toMatchObject({
+      source: 'homepage-hero', referrer: 'https://google.com', consent: true
+    });
   });
 });
 ```
@@ -1229,39 +1345,108 @@ Expected: failure.
 `src/pages/api/subscribe.ts`:
 ```typescript
 import type { APIRoute } from 'astro';
-import { getProvider, type EmailProvider } from '@/lib/email';
+import { getProvider, type EmailProvider, type SubscribeMeta } from '@/lib/email';
 
 export const prerender = false;
 
+function methodNotAllowed(): Response {
+  return new Response(JSON.stringify({ error: 'method not allowed' }), {
+    status: 405,
+    headers: { 'Content-Type': 'application/json', Allow: 'POST' }
+  });
+}
+
 export async function handleSubscribe(req: Request, provider: EmailProvider): Promise<Response> {
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-  let body: any;
-  try { body = await req.json(); } catch { return new Response('Bad JSON', { status: 400 }); }
-  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  if (!email) return new Response(JSON.stringify({ error: 'email required' }), { status: 400 });
+  if (req.method !== 'POST') return methodNotAllowed();
+
+  let body: Record<string, unknown>;
+  try { body = await req.json() as Record<string, unknown>; }
+  catch { return json({ error: 'invalid JSON body' }, 400); }
+
+  // Honeypot: bots typically fill every visible field. The `website` input is hidden
+  // via CSS in EmailCapture.astro - any value here means a bot.
+  // Return 200 so the bot thinks it succeeded, but do not subscribe.
+  if (typeof body.website === 'string' && body.website.length > 0) {
+    return json({ ok: true }, 200);
+  }
+
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  if (!email) return json({ error: 'email required' }, 400);
+
+  const consent = body.consent === true;
+  if (!consent) return json({ error: 'consent required' }, 400);
+
+  const meta: SubscribeMeta = {
+    consent: true,
+    consent_timestamp: new Date().toISOString(),
+    source: typeof body.source === 'string' ? body.source : 'unknown',
+    referrer: typeof body.referrer === 'string' ? body.referrer : null,
+    utm_source: typeof body.utm_source === 'string' ? body.utm_source : null,
+    utm_medium: typeof body.utm_medium === 'string' ? body.utm_medium : null,
+    utm_campaign: typeof body.utm_campaign === 'string' ? body.utm_campaign : null
+  };
+
   try {
-    await provider.subscribe(email);
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200, headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (err: any) {
-    if (/invalid email/i.test(err?.message ?? '')) {
-      return new Response(JSON.stringify({ error: 'invalid email' }), { status: 400 });
-    }
-    return new Response(JSON.stringify({ error: 'subscribe failed' }), { status: 500 });
+    await provider.subscribe(email, meta);
+    return json({ ok: true }, 200);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : '';
+    if (/invalid email/i.test(message)) return json({ error: 'invalid email' }, 400);
+    return json({ error: 'subscribe failed' }, 500);
   }
 }
 
+function json(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status, headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+// Only POST is supported. GET returns 405 without touching getProvider() so
+// missing env vars cannot cause a 500 on idle pings (probes, crawlers, etc).
 export const POST: APIRoute = async ({ request }) => handleSubscribe(request, getProvider());
-export const GET: APIRoute = async ({ request }) => handleSubscribe(request, getProvider());
+export const GET: APIRoute = async () => methodNotAllowed();
+export const PUT: APIRoute = async () => methodNotAllowed();
+export const DELETE: APIRoute = async () => methodNotAllowed();
 ```
+
+**Email provider interface update** — adjust `src/lib/email.ts` (defined in Task 8) so `EmailProvider.subscribe` accepts a `SubscribeMeta` argument and `MemoryProvider` records meta for the test. Add to the email lib:
+
+```typescript
+export interface SubscribeMeta {
+  consent: boolean;
+  consent_timestamp: string;
+  source: string;
+  referrer: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+}
+
+export interface EmailProvider {
+  subscribe(email: string, meta: SubscribeMeta): Promise<void>;
+}
+
+export class MemoryProvider implements EmailProvider {
+  private emails: string[] = [];
+  private lastMetaObj: SubscribeMeta | null = null;
+  async subscribe(email: string, meta: SubscribeMeta) {
+    this.emails.push(email);
+    this.lastMetaObj = meta;
+  }
+  list(): string[] { return [...this.emails]; }
+  lastMeta(): SubscribeMeta | null { return this.lastMetaObj; }
+}
+```
+
+External providers (Kit/Loops/Mailchimp) should pass `meta` as custom subscriber fields to keep consent records inside the email tool.
 
 - [ ] **Step 4: Verify tests pass**
 
 ```bash
 npm test -- tests/api/subscribe.test.ts
 ```
-Expected: 4 tests pass.
+Expected: 6 tests pass (valid + invalid email + missing consent + honeypot + missing email + meta forwarding).
 
 - [ ] **Step 5: Commit**
 
@@ -1281,8 +1466,8 @@ git commit -m "feat: add /api/subscribe endpoint with provider injection (TDD)"
 
 `tests/api/refresh-feeds.test.ts`:
 ```typescript
-import { describe, it, expect, vi } from 'vitest';
-import { authoriseCron, dedupeAgainstExisting } from '@/pages/api/cron/refresh-feeds';
+import { describe, it, expect } from 'vitest';
+import { authoriseCron, dedupeAgainstExisting, withinMaxAge } from '@/pages/api/cron/refresh-feeds';
 
 describe('authoriseCron', () => {
   it('accepts matching bearer token', () => {
@@ -1310,6 +1495,22 @@ describe('dedupeAgainstExisting', () => {
     expect(result.map(r => r.url)).toEqual(['https://c']);
   });
 });
+
+describe('withinMaxAge', () => {
+  it('returns true for an item published today', () => {
+    expect(withinMaxAge(new Date(), 14)).toBe(true);
+  });
+  it('returns true for an item 13 days old', () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 13);
+    expect(withinMaxAge(d, 14)).toBe(true);
+  });
+  it('returns false for an item 30 days old', () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    expect(withinMaxAge(d, 14)).toBe(false);
+  });
+});
 ```
 
 - [ ] **Step 2: Verify test fails**
@@ -1319,7 +1520,9 @@ npm test -- tests/api/refresh-feeds.test.ts
 ```
 Expected: failure.
 
-- [ ] **Step 3: Implement refresh-feeds.ts**
+- [ ] **Step 3: Implement refresh-feeds.ts (hardened)**
+
+Hardening applied: max-new-items cap (prevents runaway Claude spend), max-age cutoff (ignores stale items republishing), per-feed timeout via AbortSignal, upsert on `(niche, original_url)` conflict, per-feed error reporting in the response, slug collision retry with suffix, and `dryRun=1` query param for safe testing.
 
 `src/pages/api/cron/refresh-feeds.ts`:
 ```typescript
@@ -1333,6 +1536,11 @@ import { SITE } from '@/config/site';
 
 export const prerender = false;
 
+// Operational caps - guardrails against runaway costs and stale data.
+const MAX_NEW_ITEMS_PER_RUN = 30;
+const MAX_AGE_DAYS = 14;
+const PER_FEED_TIMEOUT_MS = 20_000;
+
 export function authoriseCron(req: Request, secret: string): boolean {
   const auth = req.headers.get('authorization') ?? '';
   return auth === `Bearer ${secret}`;
@@ -1342,6 +1550,11 @@ export function dedupeAgainstExisting<T extends { url: string }>(items: T[], exi
   return items.filter(i => !existing.has(i.url));
 }
 
+export function withinMaxAge(publishedAt: Date, maxAgeDays = MAX_AGE_DAYS): boolean {
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  return publishedAt.getTime() >= cutoff;
+}
+
 async function getExistingUrls(): Promise<Set<string>> {
   const supa = adminClient();
   const { data, error } = await supa
@@ -1349,7 +1562,7 @@ async function getExistingUrls(): Promise<Set<string>> {
     .select('original_url')
     .eq('niche', SITE.niche);
   if (error) throw error;
-  return new Set((data ?? []).map((r: any) => r.original_url));
+  return new Set((data ?? []).map((r: { original_url: string }) => r.original_url));
 }
 
 interface InsertRow {
@@ -1375,7 +1588,8 @@ async function processItem(item: RssItem, feedName: string, feedUrl: string): Pr
       source_url: feedUrl,
       original_url: item.url,
       title: item.title,
-      original_content: item.content,
+      // Cap stored excerpt to 500 chars - we link to the original, we do not republish full bodies.
+      original_content: item.content.slice(0, 500),
       published_at: item.publishedAt.toISOString(),
       niche: SITE.niche,
       ai_summary: enr.summary,
@@ -1390,32 +1604,84 @@ async function processItem(item: RssItem, feedName: string, feedUrl: string): Pr
   }
 }
 
-export const GET: APIRoute = async ({ request }) => {
+async function insertWithSlugRetry(supa: ReturnType<typeof adminClient>, row: InsertRow): Promise<{ ok: boolean; error?: string }> {
+  // Try the slug as generated; if a collision exists on (niche, slug), append -2, -3, ...
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = attempt === 0 ? row.slug : `${row.slug}-${attempt + 1}`;
+    const { error } = await supa.from('feed_items').upsert(
+      { ...row, slug: candidate },
+      { onConflict: 'niche,original_url' }
+    );
+    if (!error) return { ok: true };
+    if (!/duplicate key|unique constraint/i.test(error.message ?? '')) {
+      return { ok: false, error: error.message };
+    }
+    // duplicate on niche+slug - retry with suffix
+  }
+  return { ok: false, error: 'slug collision after 5 attempts' };
+}
+
+export const GET: APIRoute = async ({ request, url }) => {
   if (!authoriseCron(request, import.meta.env.CRON_SECRET)) {
     return new Response('Unauthorised', { status: 401 });
   }
 
+  const dryRun = url.searchParams.get('dryRun') === '1';
   const existing = await getExistingUrls();
   const supa = adminClient();
-  const summary = { feeds: 0, fetched: 0, new_items: 0, enriched: 0, errors: 0 };
+
+  const summary = {
+    started_at: new Date().toISOString(),
+    dry_run: dryRun,
+    feeds_processed: 0,
+    items_fetched: 0,
+    items_skipped_existing: 0,
+    items_skipped_age: 0,
+    items_new: 0,
+    items_inserted: 0,
+    items_errored: 0,
+    capped_at_max: false,
+    per_feed: [] as Array<{ name: string; ok: boolean; error?: string; new_items?: number }>
+  };
+
+  let remainingCap = MAX_NEW_ITEMS_PER_RUN;
 
   for (const feed of FEEDS.filter(f => f.enabled)) {
-    summary.feeds++;
-    try {
-      const items = await fetchFeed(feed.url);
-      summary.fetched += items.length;
-      const fresh = dedupeAgainstExisting(items, existing);
-      summary.new_items += fresh.length;
+    if (remainingCap <= 0) {
+      summary.capped_at_max = true;
+      summary.per_feed.push({ name: feed.name, ok: true, new_items: 0 });
+      continue;
+    }
 
-      for (const item of fresh) {
+    summary.feeds_processed++;
+    try {
+      const items = await fetchFeed(feed.url, { signal: AbortSignal.timeout(PER_FEED_TIMEOUT_MS) });
+      summary.items_fetched += items.length;
+
+      const fresh = dedupeAgainstExisting(items, existing);
+      summary.items_skipped_existing += items.length - fresh.length;
+
+      const withinAge = fresh.filter(i => withinMaxAge(i.publishedAt));
+      summary.items_skipped_age += fresh.length - withinAge.length;
+
+      const capped = withinAge.slice(0, remainingCap);
+      summary.items_new += capped.length;
+      remainingCap -= capped.length;
+
+      for (const item of capped) {
         const row = await processItem(item, feed.name, feed.url);
-        if (!row) { summary.errors++; continue; }
-        const { error } = await supa.from('feed_items').insert(row);
-        if (error) { summary.errors++; console.error('Insert failed', error); }
-        else { summary.enriched++; existing.add(item.url); }
+        if (!row) { summary.items_errored++; continue; }
+        if (dryRun) { summary.items_inserted++; continue; }
+        const res = await insertWithSlugRetry(supa, row);
+        if (res.ok) { summary.items_inserted++; existing.add(item.url); }
+        else { summary.items_errored++; console.error('Insert failed', res.error); }
       }
-    } catch (err) {
-      summary.errors++;
+
+      summary.per_feed.push({ name: feed.name, ok: true, new_items: capped.length });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      summary.items_errored++;
+      summary.per_feed.push({ name: feed.name, ok: false, error: message });
       console.error('Feed failed:', feed.name, err);
     }
   }
@@ -1426,12 +1692,14 @@ export const GET: APIRoute = async ({ request }) => {
 };
 ```
 
+**Note:** `fetchFeed` in Task 7 must accept an optional `{ signal }` parameter and pass it through to the underlying fetch. Update the Task 7 signature accordingly.
+
 - [ ] **Step 4: Verify tests pass**
 
 ```bash
 npm test -- tests/api/refresh-feeds.test.ts
 ```
-Expected: 4 tests pass.
+Expected: 7 tests pass (3 authoriseCron + 1 dedupe + 3 withinMaxAge).
 
 - [ ] **Step 5: Commit**
 
@@ -1570,33 +1838,53 @@ git commit -m "feat: add Header and Footer components"
 ```astro
 ---
 import { SITE } from '@/config/site';
-interface Props { compact?: boolean; }
-const { compact = false } = Astro.props;
+interface Props { compact?: boolean; source?: string; }
+const { compact = false, source = 'unknown' } = Astro.props;
 ---
 <form
   data-subscribe
+  data-source={source}
   class:list={[
-    'flex flex-col sm:flex-row gap-2',
+    'flex flex-col gap-2',
     compact ? 'max-w-md' : 'max-w-xl'
   ]}
 >
-  <input
-    type="email"
-    name="email"
-    required
-    placeholder={SITE.email.capturePlaceholder}
-    class="flex-1 px-4 py-2 rounded-md border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-light"
-  />
-  <button
-    type="submit"
-    class="px-5 py-2 rounded-md bg-brand text-white font-semibold hover:bg-brand-dark transition-colors"
-  >
-    {SITE.email.ctaButton}
-  </button>
+  <div class="flex flex-col sm:flex-row gap-2">
+    <input
+      type="email"
+      name="email"
+      required
+      placeholder={SITE.email.capturePlaceholder}
+      class="flex-1 px-4 py-2 rounded-md border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-light"
+    />
+    <button
+      type="submit"
+      class="px-5 py-2 rounded-md bg-brand text-white font-semibold hover:bg-brand-dark transition-colors"
+    >
+      {SITE.email.ctaButton}
+    </button>
+  </div>
+
+  {/* Honeypot field - hidden from real users via CSS + aria. Bots see and fill it. */}
+  <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+    <label>Website (leave blank)
+      <input type="text" name="website" tabindex="-1" autocomplete="off" />
+    </label>
+  </div>
+
+  <label class="flex items-start gap-2 text-xs text-slate-600">
+    <input type="checkbox" name="consent" required class="mt-0.5" />
+    <span>{SITE.email.consentText}</span>
+  </label>
 </form>
-<p data-subscribe-msg class="mt-2 text-sm text-slate-600 hidden"></p>
+<p data-subscribe-msg class="mt-2 text-sm text-slate-600 hidden" role="status"></p>
 
 <script>
+  function getUTM(name: string): string | null {
+    const v = new URL(window.location.href).searchParams.get(name);
+    return v && v.length > 0 ? v : null;
+  }
+
   document.querySelectorAll('form[data-subscribe]').forEach(form => {
     const f = form as HTMLFormElement;
     const msg = f.parentElement?.querySelector('[data-subscribe-msg]') as HTMLElement;
@@ -1604,22 +1892,37 @@ const { compact = false } = Astro.props;
       e.preventDefault();
       const data = new FormData(f);
       const email = data.get('email') as string;
+      const consent = data.get('consent') === 'on';
+      const website = (data.get('website') as string) ?? '';
+
       msg.classList.remove('hidden');
       msg.textContent = 'Subscribing...';
+
       try {
         const res = await fetch('/api/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({
+            email,
+            consent,
+            website,
+            source: f.dataset.source ?? 'unknown',
+            referrer: document.referrer || null,
+            utm_source: getUTM('utm_source'),
+            utm_medium: getUTM('utm_medium'),
+            utm_campaign: getUTM('utm_campaign')
+          })
         });
         const json = await res.json();
         if (res.ok) {
-          msg.textContent = "You're in. Check your inbox to confirm.";
+          msg.textContent = "You're on the list. We'll email you when the daily digest launches.";
           f.reset();
+        } else if (json?.error === 'consent required') {
+          msg.textContent = 'Please tick the consent box to continue.';
+        } else if (json?.error === 'invalid email') {
+          msg.textContent = 'That email looks wrong - try again.';
         } else {
-          msg.textContent = json?.error === 'invalid email'
-            ? 'That email looks wrong - try again.'
-            : 'Something went wrong. Try again later.';
+          msg.textContent = 'Something went wrong. Try again later.';
         }
       } catch {
         msg.textContent = 'Network error - try again.';
@@ -1640,9 +1943,9 @@ import EmailCapture from './EmailCapture.astro';
   <div class="max-w-5xl mx-auto px-4 py-12 sm:py-16">
     <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">{SITE.email.ctaHeadline}</h1>
     <p class="mt-3 text-lg text-blue-100">{SITE.email.ctaSubhead}</p>
-    <div class="mt-6"><EmailCapture /></div>
+    <div class="mt-6"><EmailCapture source="homepage-hero" /></div>
     <p class="mt-3 text-xs text-blue-200">
-      One email per day. Unsubscribe anytime. We never share your address.
+      Unsubscribe anytime. We never share your address.
     </p>
   </div>
 </section>
@@ -1978,6 +2281,207 @@ git commit -m "feat: add /news/[slug] item page with related items"
 
 ---
 
+## Task 19.5: SEO plumbing - sitemap, robots, JSON-LD, site RSS
+
+For an SEO/GEO-driven satellite site, sitemap.xml and robots.txt are launch hygiene, not polish. JSON-LD lets Google parse item pages as Articles. A site RSS feed lets other aggregators (including AI crawlers) pick up content.
+
+**Files:**
+- Create: `src/pages/sitemap.xml.ts`
+- Create: `src/pages/feed.xml.ts`
+- Create: `public/robots.txt`
+- Modify: `src/pages/news/[slug].astro` (add JSON-LD script tag)
+- Modify: `src/layouts/Base.astro` (add OG image meta)
+
+- [ ] **Step 1: Create dynamic sitemap.xml**
+
+`src/pages/sitemap.xml.ts`:
+```typescript
+import type { APIRoute } from 'astro';
+import { publicClient } from '@/lib/supabase';
+import { SITE } from '@/config/site';
+
+export const prerender = false;
+
+export const GET: APIRoute = async () => {
+  const supa = publicClient();
+  const { data } = await supa
+    .from('feed_items')
+    .select('slug, published_at')
+    .eq('niche', SITE.niche)
+    .order('published_at', { ascending: false })
+    .limit(5000);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const staticUrls = [
+    { loc: `${SITE.url}/`, lastmod: today, changefreq: 'daily', priority: '1.0' },
+    { loc: `${SITE.url}/news`, lastmod: today, changefreq: 'daily', priority: '0.9' },
+    { loc: `${SITE.url}/about`, lastmod: today, changefreq: 'monthly', priority: '0.5' },
+    { loc: `${SITE.url}/privacy`, lastmod: today, changefreq: 'yearly', priority: '0.2' },
+    { loc: `${SITE.url}/terms`, lastmod: today, changefreq: 'yearly', priority: '0.2' },
+  ];
+
+  const itemUrls = (data ?? []).map((item: { slug: string; published_at: string }) => ({
+    loc: `${SITE.url}/news/${item.slug}`,
+    lastmod: item.published_at.slice(0, 10),
+    changefreq: 'monthly',
+    priority: '0.7'
+  }));
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${[...staticUrls, ...itemUrls].map(u => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${u.lastmod}</lastmod>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+
+  return new Response(xml, {
+    status: 200,
+    headers: { 'Content-Type': 'application/xml; charset=utf-8' }
+  });
+};
+```
+
+- [ ] **Step 2: Create site RSS feed**
+
+`src/pages/feed.xml.ts`:
+```typescript
+import type { APIRoute } from 'astro';
+import { publicClient } from '@/lib/supabase';
+import { SITE } from '@/config/site';
+
+export const prerender = false;
+
+function escape(s: string): string {
+  return s.replace(/[<>&'"]/g, c => (
+    { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]!
+  ));
+}
+
+export const GET: APIRoute = async () => {
+  const supa = publicClient();
+  const { data } = await supa
+    .from('feed_items')
+    .select('*')
+    .eq('niche', SITE.niche)
+    .gte('relevance_score', 40)
+    .order('published_at', { ascending: false })
+    .limit(30);
+
+  const items = (data ?? []).map((i: {
+    title: string; slug: string; ai_summary: string; published_at: string; original_url: string;
+  }) => `  <item>
+    <title>${escape(i.title)}</title>
+    <link>${SITE.url}/news/${i.slug}</link>
+    <guid isPermaLink="true">${SITE.url}/news/${i.slug}</guid>
+    <description>${escape(i.ai_summary)}</description>
+    <pubDate>${new Date(i.published_at).toUTCString()}</pubDate>
+    <source url="${escape(i.original_url)}">External source</source>
+  </item>`).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>${escape(SITE.name)}</title>
+  <link>${SITE.url}</link>
+  <description>${escape(SITE.email.ctaSubhead)}</description>
+  <language>en-au</language>
+  <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+${items}
+</channel>
+</rss>`;
+
+  return new Response(xml, {
+    status: 200,
+    headers: { 'Content-Type': 'application/rss+xml; charset=utf-8' }
+  });
+};
+```
+
+- [ ] **Step 3: Create robots.txt**
+
+`public/robots.txt`:
+```
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://tradieintel.com.au/sitemap.xml
+```
+
+- [ ] **Step 4: Add JSON-LD Article schema to item page**
+
+Modify `src/pages/news/[slug].astro` head/early-content to inject a `<script type="application/ld+json">` block:
+
+```astro
+---
+// ... existing imports and data fetch ...
+const ldJson = {
+  '@context': 'https://schema.org',
+  '@type': 'NewsArticle',
+  headline: item.title,
+  description: item.ai_summary,
+  datePublished: item.published_at,
+  mainEntityOfPage: { '@type': 'WebPage', '@id': `${SITE.url}/news/${item.slug}` },
+  publisher: {
+    '@type': 'Organization',
+    name: SITE.name,
+    logo: { '@type': 'ImageObject', url: `${SITE.url}/favicon.svg` }
+  },
+  isBasedOn: item.original_url,
+  keywords: item.tags.join(', ')
+};
+---
+<Base ...>
+  <script type="application/ld+json" set:html={JSON.stringify(ldJson)} />
+  <!-- rest of page -->
+</Base>
+```
+
+- [ ] **Step 5: Add OG image fallback in Base.astro**
+
+In `src/layouts/Base.astro` `<head>`, add:
+
+```astro
+<meta property="og:image" content={`${SITE.url}/og-default.png`} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+```
+
+Create a placeholder `public/og-default.png` (1200x630, brand colour with site name). Manual one-off; not blocking.
+
+- [ ] **Step 6: Reference feed in Base layout head**
+
+In `src/layouts/Base.astro` `<head>`:
+
+```astro
+<link rel="alternate" type="application/rss+xml" title={`${SITE.name} RSS`} href="/feed.xml" />
+```
+
+- [ ] **Step 7: Verify endpoints respond**
+
+```bash
+npm run dev
+# In another terminal:
+curl -s http://localhost:4321/sitemap.xml | head -20
+curl -s http://localhost:4321/feed.xml | head -20
+curl -s http://localhost:4321/robots.txt
+```
+
+Expected: sitemap.xml returns valid XML, feed.xml returns RSS, robots.txt returns plain text with sitemap reference.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/pages/sitemap.xml.ts src/pages/feed.xml.ts public/robots.txt src/pages/news/[slug].astro src/layouts/Base.astro
+git commit -m "feat: add sitemap, RSS feed, robots.txt, and JSON-LD article schema"
+```
+
+---
+
 ## Task 20: Static pages (about, privacy, terms)
 
 **Files:**
@@ -2269,7 +2773,28 @@ If errors > 0, check Vercel function logs and `supabase/feed_items` for partial 
 
 Visit https://tradieintel.com.au - the homepage should now show the cron job's enriched items. Click an item slug to verify the item page renders.
 
-- [ ] **Step 7: Final commit**
+- [ ] **Step 7: Real-provider email smoke test**
+
+Mocked tests do not catch real-provider quirks (Kit/Loops/Mailchimp APIs all have their own auth and shape gotchas). With `EMAIL_PROVIDER` set to the real provider in Vercel:
+
+1. From a different browser/incognito, subscribe a real test email (use a +alias like `greg+tradie-test@gthdigitalmarketing.com.au`)
+2. Confirm a 200 response, then check the provider's dashboard - the email should appear with the consent metadata (source, referrer, utm fields, consent_timestamp)
+3. Confirm the double-opt-in confirmation email arrives (for Kit and Mailchimp; Loops does not have native DOI)
+4. Confirm the consent text matches what was displayed at capture
+
+If anything fails: fix the provider integration in `src/lib/email.ts`, redeploy, retest.
+
+- [ ] **Step 8: Verify sitemap and feed are reachable**
+
+```bash
+curl -sI https://tradieintel.com.au/sitemap.xml
+curl -sI https://tradieintel.com.au/feed.xml
+curl -s https://tradieintel.com.au/robots.txt
+```
+
+Expected: all 200, robots.txt references sitemap URL.
+
+- [ ] **Step 9: Final commit**
 
 If any config tweaks were made (e.g. fixed a feed URL), commit and push:
 ```bash
@@ -2286,9 +2811,11 @@ The site is live, the cron is running, and email capture is working. v1 complete
 
 ## Post-launch checklist (out of scope for this plan)
 
-- Submit to Google Search Console
-- Submit sitemap (add `src/pages/sitemap.xml.ts` in a follow-up)
-- Decide and configure final email provider (currently Kit assumed default - swap `EMAIL_PROVIDER` env var to change)
-- Lock in lead magnet and update `SITE.email.ctaSubhead`
-- Visual brand polish (typography, real favicon, OG image)
+- Submit `tradieintel.com.au` to Google Search Console; submit the sitemap URL
+- **Build the actual daily email digest** (Task 24, future): once 200+ subscribers, build a digest sender that selects top 5-10 items, renders HTML+text, sends via the configured provider, includes legal sender identity + unsubscribe. Until then the CTA promises "we'll email you when it launches" - keep that promise.
+- Lock in final email provider choice (Kit assumed default; swap `EMAIL_PROVIDER` env var to change)
+- Decide and produce a real lead magnet (e.g. customised AI policy template); update `SITE.email.ctaSubhead`
+- Visual brand polish (typography, real favicon, real OG image rather than placeholder)
 - Add allied health niche site (separate Vercel project, reuses Supabase via `niche='allied-health'` filter)
+- Add IP rate limiting on `/api/subscribe` via Vercel KV or Upstash once traffic justifies it
+- Replace placeholder OG image with a branded 1200x630 PNG
