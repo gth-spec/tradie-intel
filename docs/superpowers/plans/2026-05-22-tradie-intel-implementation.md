@@ -434,10 +434,12 @@ git commit -m "feat: add site, feeds, and tag vocabulary config"
 -- Initial schema for Tradie Intel and future allied health hub.
 -- The `niche` column lets both sites share this table.
 
-create extension if not exists "uuid-ossp";
+-- gen_random_uuid() is built into Postgres 13+ - no extension needed in public search path.
+-- Avoid uuid_generate_v4() / "uuid-ossp" extension: on modern Supabase the function
+-- lives in the extensions schema and is not callable from public without qualification.
 
 create table feed_items (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   source text not null,
   source_url text not null,
   original_url text not null,

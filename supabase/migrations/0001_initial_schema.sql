@@ -1,12 +1,13 @@
 -- Tradie Intel initial schema
--- Apply via Supabase Dashboard → SQL Editor → New query → paste → Run
+-- Apply via `supabase db push` (or paste into Dashboard → SQL Editor as a fallback).
 -- Designed to support both 'trades' and (future) 'allied-health' niches in
 -- the same table, distinguished by the niche column.
 
-create extension if not exists "uuid-ossp";
+-- gen_random_uuid() is built into Postgres 13+ and is the modern Supabase-
+-- recommended UUID generator (no extension needed in the public search path).
 
 create table feed_items (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   source text not null,
   source_url text not null,
   original_url text not null,
