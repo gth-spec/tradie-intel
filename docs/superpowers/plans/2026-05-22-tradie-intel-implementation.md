@@ -155,7 +155,7 @@ Tailwind 4 is integrated via the official Vite plugin (the legacy `@astrojs/tail
 
 ```javascript
 import { defineConfig } from 'astro/config';
-import vercel from '@astrojs/vercel/serverless';
+import vercel from '@astrojs/vercel';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
