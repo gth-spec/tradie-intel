@@ -1,0 +1,103 @@
+---
+import Base from '@/layouts/Base.astro';
+import FeedCard from '@/components/FeedCard.astro';
+import EmailCapture from '@/components/EmailCapture.astro';
+import SourceBadge from '@/components/SourceBadge.astro';
+import { publicClient } from '@/lib/supabase';
+import { SITE } from '@/config/site';
+import { selectRelated } from '@/lib/related';
+import type { FeedItem } from '@/lib/supabase';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+if (!slug) return Astro.redirect('/news');
+
+const supa = publicClient();
+const { data: itemData } = await supa
+  .from('feed_items')
+  .select('*')
+  .eq('niche', SITE.niche)
+  .eq('slug', slug)
+  .maybeSingle();
+
+if (!itemData) return new Response('Not found', { status: 404 });
+const item = itemData as FeedItem;
+
+const { data: candidates } = await supa
+  .from('feed_items')
+  .select('*')
+  .eq('niche', SITE.niche)
+  .neq('id', item.id)
+  .order('published_at', { ascending: false })
+  .limit(50);
+
+const related = selectRelated(item, (candidates ?? []) as FeedItem[], 3);
+const formattedDate = new Date(item.published_at).toLocaleDateString('en-AU', {
+  day: 'numeric', month: 'long', year: 'numeric'
+});
+---
+<Base title={item.title} description={item.ai_summary ?? item.title}>
+  <article class="max-w-3xl mx-auto px-4 py-12">
+    <nav class="text-sm text-slate-500 mb-4" aria-label="Breadcrumb">
+      <a href="/" class="hover:text-brand">Home</a>
+      <span class="mx-1">›</span>
+      <a href="/news" class="hover:text-brand">News</a>
+    </nav>
+
+    <div class="flex items-center gap-2 mb-4 text-sm text-slate-500">
+      <SourceBadge source={item.source} />
+      <span>·</span>
+      <time datetime={item.published_at}>{formattedDate}</time>
+    </div>
+
+    <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-6">{item.title}</h1>
+
+    {item.ai_summary && (
+      <div class="prose prose-slate max-w-none mb-6">
+        <p class="text-lg text-slate-800">{item.ai_summary}</p>
+      </div>
+    )}
+
+    {item.why_it_matters && (
+      <div class="bg-blue-50 border-l-4 border-brand p-4 my-6 rounded-r">
+        <p class="text-sm font-semibold text-brand-dark uppercase tracking-wide mb-1">Why it matters</p>
+        <p class="text-slate-800">{item.why_it_matters}</p>
+      </div>
+    )}
+
+    {item.tags.length > 0 && (
+      <div class="flex flex-wrap gap-1.5 mb-6">
+        {item.tags.map(tag => (
+          <span class="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">{tag}</span>
+        ))}
+      </div>
+    )}
+
+    <div class="border-t border-slate-200 pt-6 mb-8">
+      <a
+        href={item.original_url}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        class="inline-flex items-center gap-2 text-brand font-medium hover:underline"
+      >
+        Read the original at {item.source} <span aria-hidden="true">↗</span>
+      </a>
+    </div>
+
+    <aside class="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-12">
+      <h2 class="text-lg font-semibold mb-2">{SITE.email.ctaHeadline}</h2>
+      <p class="text-sm text-slate-600 mb-4">{SITE.email.ctaSubhead}</p>
+      <EmailCapture compact source="item-page" />
+    </aside>
+
+    {related.length > 0 && (
+      <section>
+        <h2 class="text-xl font-semibold mb-4">Related</h2>
+        <div class="grid gap-4">
+          {related.map(r => <FeedCard item={r} />)}
+        </div>
+      </section>
+    )}
+  </article>
+</Base>
