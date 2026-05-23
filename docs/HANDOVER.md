@@ -34,14 +34,19 @@
 | Build | Clean (`npm run build` produces working Vercel SSR output) |
 | Repo | https://github.com/gth-spec/tradie-intel (public) |
 
-**What's NOT done yet:**
-- Vercel project not created (no production deploy yet)
-- Custom domain not pointing at Vercel (DNS not changed at VentraIP)
-- Firecrawl API key not obtained
-- Apify token not obtained
-- Email provider locked in (`EMAIL_PROVIDER=memory` for dev; needs `kit`/`loops`/`mailchimp` before public launch)
-- First cron run not executed (Supabase `feed_items` table is empty)
-- Lead magnet content not produced (CTA copy is placeholder "we'll email you when the digest launches")
+**Deploy progress (2026-05-23):**
+- ✅ Vercel project created, linked to GitHub repo (Astro preset confirmed)
+- ✅ DNS configured on **Cloudflare** (not VentraIP as originally planned): `tradieintel.com.au` → `76.76.21.21` (Vercel, DNS only) + `tradieintel.au` → 301 → `https://tradieintel.com.au`
+- ✅ Email provider chosen: **Kit** (API key in local `.env`)
+- ⏳ Env vars not yet entered in Vercel dashboard
+- ⏳ `EMAIL_LIST_ID` still outstanding (need to create the Kit list/form first)
+- ⏳ Firecrawl API key not yet obtained
+- ⏳ Apify token not yet obtained
+- ⏳ Not yet deployed (no live URL)
+- ⏳ First cron run not executed (Supabase `feed_items` table is empty)
+- ⏳ Lead magnet content not produced (CTA copy is placeholder "we'll email you when the digest launches")
+
+**🔐 SECURITY:** Anthropic, Supabase, Firecrawl, and Apify API keys were visible in chat on 2026-05-23. **Rotate all of them before go-live.** Update local `.env` and Vercel env vars with the new values.
 
 ---
 
@@ -158,45 +163,50 @@ tradie-intel/
 
 In order:
 
-### 1. Get the missing API keys
-- **Firecrawl:** sign up at https://firecrawl.dev (free tier: 500 scrapes/month, your usage will be ~210/month so well within)
+### 1. Rotate exposed API keys
+**Do this first.** Keys for Anthropic, Supabase, Firecrawl, Apify were visible in chat on 2026-05-23. Regenerate each, update local `.env`, then put the new values into Vercel env vars in step 4.
+
+### 2. Get the missing API keys
+- **Firecrawl:** sign up at https://firecrawl.dev (free tier: 500 scrapes/month, ~210/month usage well within)
 - **Apify:** sign up at https://apify.com (free tier: $5/month credit - only used when Firecrawl fails)
 
-### 2. Decide and configure the email provider
-Default is `EMAIL_PROVIDER=memory` (dev only). Pick one before public launch:
-- **Kit** - Greg's leaning here, best for solo creators in AU
-- **Loops** - dev-friendly, no native double-opt-in
-- **Mailchimp** - familiar but older UX
+### 3. Finish Kit setup
+Email provider is locked in as **Kit**. API key is in local `.env`. Outstanding:
+- Create the Kit list/form for Tradie Intel subscribers (one form per niche site)
+- Copy the form ID to `EMAIL_LIST_ID` in `.env` and (next step) Vercel
+- Confirm `EMAIL_PROVIDER=kit` in `.env` (currently still `memory` from dev)
 
-Sign up, get API key, set `EMAIL_PROVIDER`, `EMAIL_PROVIDER_API_KEY`, `EMAIL_LIST_ID` in Vercel.
+### 4. Enter env vars in Vercel dashboard
+Vercel project is already created and connected to the GitHub repo. Outstanding:
+- Vercel project settings → Environment Variables → add every key from `.env.example` with the rotated values
+- Required: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`, `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CRON_SECRET`, `EMAIL_PROVIDER=kit`, `EMAIL_PROVIDER_API_KEY`, `EMAIL_LIST_ID`, `FIRECRAWL_API_KEY`, `APIFY_TOKEN`
+- Trigger a deploy from the dashboard (or push any commit to main)
 
-### 3. Create Vercel project
-- Import `gth-spec/tradie-intel` from GitHub
-- Framework: Astro (auto-detected)
-- Set all env vars from `.env.example` with real values
-- Region: Sydney (`syd1`) for lowest AU latency
-- Deploy
+### 5. Confirm domain wiring
+DNS is on **Cloudflare** (not VentraIP as originally planned):
+- `tradieintel.com.au` → `A 76.76.21.21` (Vercel IP, DNS-only proxy mode)
+- `tradieintel.au` → 301 redirect to `https://tradieintel.com.au`
 
-### 4. Custom domains
-- Add `tradieintel.com.au` (primary) in Vercel project settings
-- Add `tradieintel.au` and configure as 301 redirect to primary
-- At VentraIP DNS: follow Vercel's `A` and `CNAME` record instructions
-- Wait for HTTPS auto-provisioning (~5 minutes)
+After deploy, verify:
+```bash
+curl -sI https://tradieintel.com.au | head -5      # 200, Vercel headers
+curl -sI https://tradieintel.au | head -5          # 301 redirect
+```
 
-### 5. Trigger first cron run
+### 6. Trigger first cron run
 After deploy stabilises, manually trigger:
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" https://tradieintel.com.au/api/cron/refresh-feeds
 ```
 Expected JSON response with `items_inserted` > 0 if at least one source returned items. Currently only **Master Plumbers AU** (RSS) is confirmed working, plus 8 scrape sources that need real-world testing on the deployed Vercel runtime.
 
-### 6. Real-provider email smoke test
-With the real email provider configured, subscribe a test email via the live site. Confirm:
+### 7. Real-provider email smoke test
+With Kit configured live, subscribe a test email via the deployed site. Confirm:
 - 200 response from `/api/subscribe`
-- Email appears in provider's dashboard with consent metadata (source, referrer, utm)
-- Double-opt-in confirmation arrives (Kit / Mailchimp - Loops has no native DOI)
+- Email appears in Kit dashboard with consent metadata (source, referrer, utm)
+- Double-opt-in confirmation arrives in inbox
 
-### 7. SEO submission
+### 8. SEO submission
 - Verify `tradieintel.com.au` in Google Search Console
 - Submit `https://tradieintel.com.au/sitemap.xml`
 - Confirm `robots.txt` references sitemap correctly
@@ -264,5 +274,6 @@ supabase migration list       # see migration history
 - `src/pages/api/cron/refresh-feeds.ts` - wired Apify fallback into scrape dispatch
 - `src/env.d.ts` - added `APIFY_TOKEN` type
 - `.env.example` - documented `APIFY_TOKEN`, refined `FIRECRAWL_API_KEY` comment
+- `docs/HANDOVER.md` (new) - this document
 
-Commits: `b4718c0`, `0402402` (both pushed).
+Commits: `b4718c0`, `0402402`, `5096542` (all pushed).
