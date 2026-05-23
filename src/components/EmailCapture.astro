@@ -1,0 +1,94 @@
+---
+import { SITE } from '@/config/site';
+interface Props { compact?: boolean; source?: string; }
+const { compact = false, source = 'unknown' } = Astro.props;
+---
+<form
+  data-subscribe
+  data-source={source}
+  class:list={[
+    'flex flex-col gap-2',
+    compact ? 'max-w-md' : 'max-w-xl'
+  ]}
+>
+  <div class="flex flex-col sm:flex-row gap-2">
+    <input
+      type="email"
+      name="email"
+      required
+      placeholder={SITE.email.capturePlaceholder}
+      class="flex-1 px-4 py-2 rounded-md border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-light"
+    />
+    <button
+      type="submit"
+      class="px-5 py-2 rounded-md bg-brand text-white font-semibold hover:bg-brand-dark transition-colors"
+    >
+      {SITE.email.ctaButton}
+    </button>
+  </div>
+
+  {/* Honeypot field - hidden from real users via CSS + aria. Bots see and fill it. */}
+  <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+    <label>Website (leave blank)
+      <input type="text" name="website" tabindex="-1" autocomplete="off" />
+    </label>
+  </div>
+
+  <label class="flex items-start gap-2 text-xs text-slate-600">
+    <input type="checkbox" name="consent" required class="mt-0.5" />
+    <span>{SITE.email.consentText}</span>
+  </label>
+</form>
+<p data-subscribe-msg class="mt-2 text-sm text-slate-600 hidden" role="status"></p>
+
+<script>
+  function getUTM(name: string): string | null {
+    const v = new URL(window.location.href).searchParams.get(name);
+    return v && v.length > 0 ? v : null;
+  }
+
+  document.querySelectorAll('form[data-subscribe]').forEach(form => {
+    const f = form as HTMLFormElement;
+    const msg = f.parentElement?.querySelector('[data-subscribe-msg]') as HTMLElement;
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(f);
+      const email = data.get('email') as string;
+      const consent = data.get('consent') === 'on';
+      const website = (data.get('website') as string) ?? '';
+
+      msg.classList.remove('hidden');
+      msg.textContent = 'Subscribing...';
+
+      try {
+        const res = await fetch('/api/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            consent,
+            website,
+            source: f.dataset.source ?? 'unknown',
+            referrer: document.referrer || null,
+            utm_source: getUTM('utm_source'),
+            utm_medium: getUTM('utm_medium'),
+            utm_campaign: getUTM('utm_campaign')
+          })
+        });
+        const json = await res.json();
+        if (res.ok) {
+          msg.textContent = "You're on the list. We'll email you when the daily digest launches.";
+          f.reset();
+        } else if (json?.error === 'consent required') {
+          msg.textContent = 'Please tick the consent box to continue.';
+        } else if (json?.error === 'invalid email') {
+          msg.textContent = 'That email looks wrong - try again.';
+        } else {
+          msg.textContent = 'Something went wrong. Try again later.';
+        }
+      } catch {
+        msg.textContent = 'Network error - try again.';
+      }
+    });
+  });
+</script>
