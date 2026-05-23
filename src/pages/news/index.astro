@@ -1,0 +1,43 @@
+---
+import Base from '@/layouts/Base.astro';
+import FeedCard from '@/components/FeedCard.astro';
+import { publicClient } from '@/lib/supabase';
+import { SITE } from '@/config/site';
+import type { FeedItem } from '@/lib/supabase';
+
+export const prerender = false;
+
+const url = new URL(Astro.request.url);
+const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10));
+const PAGE_SIZE = 20;
+const from = (page - 1) * PAGE_SIZE;
+const to = from + PAGE_SIZE - 1;
+
+const supa = publicClient();
+const { data, count } = await supa
+  .from('feed_items')
+  .select('*', { count: 'exact' })
+  .eq('niche', SITE.niche)
+  .order('published_at', { ascending: false })
+  .range(from, to);
+
+const items = (data ?? []) as FeedItem[];
+const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+---
+<Base title="News Archive" description="All Tradie Intel news items, latest first.">
+  <section class="max-w-5xl mx-auto px-4 py-12">
+    <h1 class="text-3xl font-bold mb-8">News Archive</h1>
+    <div class="grid gap-4">
+      {items.map(item => <FeedCard item={item} />)}
+    </div>
+    <nav class="flex justify-between items-center mt-8" aria-label="Pagination">
+      {page > 1
+        ? <a href={`/news?page=${page - 1}`} class="text-brand hover:underline">← Newer</a>
+        : <span />}
+      <span class="text-sm text-slate-500">Page {page} of {totalPages}</span>
+      {page < totalPages
+        ? <a href={`/news?page=${page + 1}`} class="text-brand hover:underline">Older →</a>
+        : <span />}
+    </nav>
+  </section>
+</Base>
