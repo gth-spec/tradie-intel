@@ -1,0 +1,32 @@
+---
+import type { FeedItem } from '@/lib/supabase';
+import SourceBadge from './SourceBadge.astro';
+interface Props { item: FeedItem; }
+const { item } = Astro.props;
+const formattedDate = new Date(item.published_at).toLocaleDateString('en-AU', {
+  day: 'numeric', month: 'short', year: 'numeric'
+});
+---
+<article class="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+  <div class="flex items-center gap-2 mb-2 text-sm text-slate-500">
+    <SourceBadge source={item.source} />
+    <span>·</span>
+    <time datetime={item.published_at}>{formattedDate}</time>
+  </div>
+  <h3 class="text-lg font-semibold text-slate-900 mb-2">
+    <a href={`/news/${item.slug}`} class="hover:text-brand">{item.title}</a>
+  </h3>
+  {item.ai_summary && <p class="text-slate-700 mb-3">{item.ai_summary}</p>}
+  {item.why_it_matters && (
+    <p class="text-sm text-slate-600 border-l-2 border-brand pl-3 mb-3">
+      <span class="font-semibold">Why it matters:</span> {item.why_it_matters}
+    </p>
+  )}
+  {item.tags.length > 0 && (
+    <div class="flex flex-wrap gap-1.5 mt-3">
+      {item.tags.map(tag => (
+        <span class="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{tag}</span>
+      ))}
+    </div>
+  )}
+</article>
