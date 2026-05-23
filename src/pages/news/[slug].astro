@@ -36,8 +36,25 @@ const related = selectRelated(item, (candidates ?? []) as FeedItem[], 3);
 const formattedDate = new Date(item.published_at).toLocaleDateString('en-AU', {
   day: 'numeric', month: 'long', year: 'numeric'
 });
+
+const ldJson = {
+  '@context': 'https://schema.org',
+  '@type': 'NewsArticle',
+  headline: item.title,
+  description: item.ai_summary ?? '',
+  datePublished: item.published_at,
+  mainEntityOfPage: { '@type': 'WebPage', '@id': `${SITE.url}/news/${item.slug}` },
+  publisher: {
+    '@type': 'Organization',
+    name: SITE.name,
+    logo: { '@type': 'ImageObject', url: `${SITE.url}/favicon.svg` }
+  },
+  isBasedOn: item.original_url,
+  keywords: item.tags.join(', ')
+};
 ---
 <Base title={item.title} description={item.ai_summary ?? item.title}>
+  <script type="application/ld+json" set:html={JSON.stringify(ldJson)} />
   <article class="max-w-3xl mx-auto px-4 py-12">
     <nav class="text-sm text-slate-500 mb-4" aria-label="Breadcrumb">
       <a href="/" class="hover:text-brand">Home</a>
