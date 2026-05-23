@@ -248,8 +248,8 @@ A lead magnet will be added before launch but is not blocking the build. Spec as
 | Variable | Purpose |
 |---|---|
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Server-side service role key |
-| `SUPABASE_ANON_KEY` | Public client key |
+| `SUPABASE_SECRET_KEY` | Server-only key (starts `sb_secret_`); bypasses RLS for the cron writer |
+| `SUPABASE_PUBLISHABLE_KEY` | Browser/SSR key (starts `sb_publishable_`); RLS-constrained reads only |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `CRON_SECRET` | Shared secret for cron endpoint auth |
 | `EMAIL_PROVIDER_API_KEY` | Whichever email provider is chosen |

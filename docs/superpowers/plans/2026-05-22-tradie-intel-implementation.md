@@ -200,8 +200,8 @@ Custom utilities (`bg-brand`, `text-brand`, `text-brand-light` etc.) are auto-ge
 
 interface ImportMetaEnv {
   readonly SUPABASE_URL: string;
-  readonly SUPABASE_SERVICE_KEY: string;
-  readonly SUPABASE_ANON_KEY: string;
+  readonly SUPABASE_SECRET_KEY: string;
+  readonly SUPABASE_PUBLISHABLE_KEY: string;
   readonly ANTHROPIC_API_KEY: string;
   readonly CRON_SECRET: string;
   readonly EMAIL_PROVIDER: 'kit' | 'loops' | 'mailchimp' | 'memory';
@@ -231,8 +231,8 @@ coverage/
 ```
 # Supabase
 SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
-SUPABASE_ANON_KEY=
+SUPABASE_SECRET_KEY=
+SUPABASE_PUBLISHABLE_KEY=
 
 # Anthropic
 ANTHROPIC_API_KEY=
@@ -484,8 +484,10 @@ Create `supabase/README.md`:
 1. Create a new Supabase project (free tier OK for v1).
 2. In the SQL editor, paste and run `migrations/0001_initial_schema.sql`.
 3. Copy `Project URL` to `SUPABASE_URL` in `.env`.
-4. Copy `service_role` key to `SUPABASE_SERVICE_KEY` in `.env`.
-5. Copy `anon` key to `SUPABASE_ANON_KEY` in `.env`.
+4. Copy the **secret key** (starts with `sb_secret_`) to `SUPABASE_SECRET_KEY` in `.env`.
+5. Copy the **publishable key** (starts with `sb_publishable_`) to `SUPABASE_PUBLISHABLE_KEY` in `.env`.
+
+Note: Supabase migrated from `anon`/`service_role` naming to `publishable`/`secret` naming in late 2025. They are functionally equivalent. If you see legacy `anon_key` / `service_role_key` references in older docs, those map to publishable / secret respectively.
 ```
 
 - [ ] **Step 3: Commit**
@@ -527,23 +529,23 @@ export interface FeedItem {
 let _adminClient: SupabaseClient | null = null;
 let _publicClient: SupabaseClient | null = null;
 
-/** Server-only client with service role - writes allowed. */
+/** Server-only client using the secret key (sb_secret_...) - writes allowed, bypasses RLS. */
 export function adminClient(): SupabaseClient {
   if (!_adminClient) {
     _adminClient = createClient(
       import.meta.env.SUPABASE_URL,
-      import.meta.env.SUPABASE_SERVICE_KEY
+      import.meta.env.SUPABASE_SECRET_KEY
     );
   }
   return _adminClient;
 }
 
-/** Public client with anon key - reads only via RLS. */
+/** Public client using the publishable key (sb_publishable_...) - reads only via RLS. */
 export function publicClient(): SupabaseClient {
   if (!_publicClient) {
     _publicClient = createClient(
       import.meta.env.SUPABASE_URL,
-      import.meta.env.SUPABASE_ANON_KEY
+      import.meta.env.SUPABASE_PUBLISHABLE_KEY
     );
   }
   return _publicClient;

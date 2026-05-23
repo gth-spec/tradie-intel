@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.vercel/
+.astro/
+.env
+.env.local
+.env.*.local
+coverage/
+*.log
+.DS_Store
+
+# Supabase local CLI state (Docker volumes, generated types, etc.)
+supabase/.branches
+supabase/.temp
