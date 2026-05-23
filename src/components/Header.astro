@@ -1,0 +1,15 @@
+---
+import { SITE } from '@/config/site';
+---
+<header class="bg-white border-b border-slate-200">
+  <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+    <a href="/" class="text-xl font-bold text-brand">{SITE.name}</a>
+    <nav class="flex items-center gap-6 text-sm">
+      <a href="/" class="text-slate-700 hover:text-brand">Home</a>
+      <a href="/news" class="text-slate-700 hover:text-brand">News</a>
+      <a href={SITE.parent.url} class="text-slate-700 hover:text-brand" rel="noopener">
+        {SITE.parent.name} <span aria-hidden="true">↗</span>
+      </a>
+    </nav>
+  </div>
+</header>

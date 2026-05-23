@@ -1,0 +1,23 @@
+---
+import { SITE } from '@/config/site';
+const year = new Date().getFullYear();
+---
+<footer class="bg-slate-900 text-slate-300 mt-16">
+  <div class="max-w-5xl mx-auto px-4 py-8 text-sm flex flex-col sm:flex-row justify-between gap-4">
+    <div>
+      <div class="font-semibold text-white">{SITE.name}</div>
+      <div class="text-slate-400 mt-1">{SITE.description}</div>
+    </div>
+    <nav class="flex flex-col sm:flex-row gap-2 sm:gap-6">
+      <a href="/about" class="hover:text-white">About</a>
+      <a href="/privacy" class="hover:text-white">Privacy</a>
+      <a href="/terms" class="hover:text-white">Terms</a>
+      <a href={SITE.parent.url} class="hover:text-white" rel="noopener">
+        Built by {SITE.parent.name} ↗
+      </a>
+    </nav>
+  </div>
+  <div class="border-t border-slate-800 text-center text-xs text-slate-500 py-3">
+    © {year} {SITE.parent.name}. All rights reserved.
+  </div>
+</footer>
