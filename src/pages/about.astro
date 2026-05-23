@@ -1,0 +1,31 @@
+---
+import Base from '@/layouts/Base.astro';
+import { SITE } from '@/config/site';
+---
+<Base title="About" description="What Tradie Intel is, who built it, and why.">
+  <article class="max-w-3xl mx-auto px-4 py-12 prose prose-slate">
+    <h1>About Tradie Intel</h1>
+    <p>
+      Tradie Intel is a daily-updated feed of news, regulatory updates, and industry signals
+      that matter to Australian trades operators - plumbers, electricians, builders
+      and contractors who don't have time to chase 20 different sources.
+    </p>
+    <p>
+      Each morning, an automated pipeline fetches stories from industry bodies,
+      regulatory authorities and trade publications, runs them through an AI summariser,
+      and tags the items by trade, state, and theme. The result is one place to skim
+      what changed - in plain English. A daily email version is on the way - join the
+      list on the homepage to get it when it launches.
+    </p>
+    <h2>Who's behind it</h2>
+    <p>
+      Tradie Intel is built and maintained by <a href={SITE.parent.url} rel="noopener">{SITE.parent.name}</a>,
+      an Australian AI consultancy and product studio working with trades and allied health businesses.
+    </p>
+    <h2>Get in touch</h2>
+    <p>
+      Feedback, suggestions, or a feed source we should add - email
+      <a href="mailto:hello@tradieintel.com.au">hello@tradieintel.com.au</a>.
+    </p>
+  </article>
+</Base>
