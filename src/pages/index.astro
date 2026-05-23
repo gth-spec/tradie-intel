@@ -1,0 +1,55 @@
+---
+import Base from '@/layouts/Base.astro';
+import Hero from '@/components/Hero.astro';
+import FeedCard from '@/components/FeedCard.astro';
+import EmailCapture from '@/components/EmailCapture.astro';
+import { publicClient } from '@/lib/supabase';
+import { SITE } from '@/config/site';
+import type { FeedItem } from '@/lib/supabase';
+
+export const prerender = false;
+
+const supa = publicClient();
+const { data, error } = await supa
+  .from('feed_items')
+  .select('*')
+  .eq('niche', SITE.niche)
+  .gte('relevance_score', 40)
+  .order('published_at', { ascending: false })
+  .limit(15);
+
+const items = (data ?? []) as FeedItem[];
+---
+<Base>
+  <Hero />
+  <section class="max-w-5xl mx-auto px-4 py-12">
+    {error && (
+      <div class="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded mb-6">
+        Unable to load feed right now. Try refreshing in a minute.
+      </div>
+    )}
+    {items.length === 0 && !error && (
+      <div class="text-center py-12 text-slate-500">
+        No items yet - check back tomorrow morning.
+      </div>
+    )}
+    <div class="grid gap-4">
+      {items.slice(0, 5).map(item => <FeedCard item={item} />)}
+    </div>
+    {items.length > 5 && (
+      <>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 my-8">
+          <h3 class="text-lg font-semibold mb-2">{SITE.email.ctaHeadline}</h3>
+          <p class="text-slate-700 mb-4 text-sm">{SITE.email.ctaSubhead}</p>
+          <EmailCapture compact source="homepage-inline" />
+        </div>
+        <div class="grid gap-4">
+          {items.slice(5).map(item => <FeedCard item={item} />)}
+        </div>
+      </>
+    )}
+    <div class="mt-8 text-center">
+      <a href="/news" class="text-brand font-medium hover:underline">View all news →</a>
+    </div>
+  </section>
+</Base>
