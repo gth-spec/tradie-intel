@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { FEEDS, type FeedSource } from '@/config/feeds';
 import { fetchFeed, type RssItem } from '@/lib/rss';
 import { scrapeSource, type ScrapedItem } from '@/lib/scrape';
+import { scrapeSourceApify } from '@/lib/scrape-apify';
 import { enrich } from '@/lib/claude';
 import { adminClient } from '@/lib/supabase';
 import { titleToSlug } from '@/lib/slug';
@@ -35,7 +36,15 @@ export function withinMaxAge(publishedAt: Date, maxAgeDays = MAX_AGE_DAYS): bool
   return publishedAt.getTime() >= cutoff;
 }
 
-async function fetchSource(source: FeedSource, signal: AbortSignal): Promise<IngestedItem[]> {
+interface FetchSourceSummary {
+  apify_fallback_calls: number;
+}
+
+async function fetchSource(
+  source: FeedSource,
+  signal: AbortSignal,
+  cronSummary: FetchSourceSummary = { apify_fallback_calls: 0 }
+): Promise<IngestedItem[]> {
   if (source.type === 'rss') {
     const items = await fetchFeed(source.url, { signal });
     return items.map((i: RssItem) => ({
@@ -43,7 +52,30 @@ async function fetchSource(source: FeedSource, signal: AbortSignal): Promise<Ing
     }));
   }
   if (source.type === 'scrape') {
-    const items = await scrapeSource(source, { signal });
+    let items: ScrapedItem[] = [];
+    let firecrawlError: unknown = null;
+
+    try {
+      items = await scrapeSource(source, { signal });
+    } catch (err) {
+      firecrawlError = err;
+      console.warn(
+        `Firecrawl failed for ${source.name}:`,
+        err instanceof Error ? err.message : err
+      );
+    }
+
+    if (items.length === 0) {
+      console.log(
+        `[apify-fallback] ${source.name} - Firecrawl returned 0 items${firecrawlError ? ' (after error)' : ''}, trying Apify`
+      );
+      const fallback = await scrapeSourceApify(source, { signal });
+      if (fallback.length > 0) {
+        cronSummary.apify_fallback_calls++;
+        items = fallback;
+      }
+    }
+
     return items.map((i: ScrapedItem) => ({
       title: i.title, url: i.link, content: i.content, publishedAt: i.published_at
     }));
@@ -135,6 +167,7 @@ export const GET: APIRoute = async ({ request, url }) => {
     items_inserted: 0,
     items_errored: 0,
     capped_at_max: false,
+    apify_fallback_calls: 0,
     per_feed: [] as Array<{ name: string; type: string; ok: boolean; error?: string; new_items?: number }>
   };
 
@@ -149,7 +182,7 @@ export const GET: APIRoute = async ({ request, url }) => {
 
     summary.feeds_processed++;
     try {
-      const items = await fetchSource(feed, AbortSignal.timeout(PER_FEED_TIMEOUT_MS));
+      const items = await fetchSource(feed, AbortSignal.timeout(PER_FEED_TIMEOUT_MS), summary);
       summary.items_fetched += items.length;
 
       const fresh = dedupeAgainstExisting(items, existing);
