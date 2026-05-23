@@ -11,5 +11,6 @@ interface ImportMetaEnv {
   readonly EMAIL_LIST_ID: string;
   readonly CLAUDE_MODEL: string;
   readonly FIRECRAWL_API_KEY: string;
+  readonly APIFY_TOKEN: string;
 }
 interface ImportMeta { readonly env: ImportMetaEnv; }
