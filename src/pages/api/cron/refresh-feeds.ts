@@ -153,6 +153,7 @@ export const GET: APIRoute = async ({ request, url }) => {
   }
 
   const dryRun = url.searchParams.get('dryRun') === '1';
+  const backfill = url.searchParams.get('backfill') === '1';
   const existing = await getExistingUrls();
   const supa = adminClient();
 
@@ -188,7 +189,7 @@ export const GET: APIRoute = async ({ request, url }) => {
       const fresh = dedupeAgainstExisting(items, existing);
       summary.items_skipped_existing += items.length - fresh.length;
 
-      const withinAge = fresh.filter(i => withinMaxAge(i.publishedAt));
+      const withinAge = backfill ? fresh : fresh.filter(i => withinMaxAge(i.publishedAt));
       summary.items_skipped_age += fresh.length - withinAge.length;
 
       const capped = withinAge.slice(0, remainingCap);
