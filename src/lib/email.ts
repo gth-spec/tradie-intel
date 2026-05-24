@@ -35,7 +35,9 @@ export class KitProvider implements EmailProvider {
   constructor(private apiKey: string, private formId: string) {}
   async subscribe(email: string, meta: SubscribeMeta): Promise<void> {
     if (!isValidEmail(email)) throw new Error('Invalid email');
-    const res = await fetch(`https://api.kit.com/v4/forms/${this.formId}/subscribers`, {
+    // Kit v4 API: POST /v4/subscribers with form_id in body.
+    // /v4/forms/{id}/subscribers returns 404 in v4 despite appearing in older docs.
+    const res = await fetch('https://api.kit.com/v4/subscribers', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -43,7 +45,7 @@ export class KitProvider implements EmailProvider {
       },
       body: JSON.stringify({
         email_address: email,
-        referrer: meta.referrer ?? meta.source,
+        form_id: Number(this.formId),
         fields: {
           source: meta.source,
           utm_source: meta.utm_source,
