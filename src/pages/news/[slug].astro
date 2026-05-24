@@ -70,16 +70,47 @@ const ldJson = {
 
     <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-6">{item.title}</h1>
 
+    {item.question_headline && (
+      <h2 class="text-xl text-slate-600 font-normal mb-6 italic">{item.question_headline}</h2>
+    )}
+
     {item.ai_summary && (
       <div class="prose prose-slate max-w-none mb-6">
         <p class="text-lg text-slate-800">{item.ai_summary}</p>
       </div>
     )}
 
+    {item.key_stat && (
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 my-6 flex gap-3">
+        <span class="text-amber-500 text-xl font-bold shrink-0" aria-hidden="true">📊</span>
+        <p class="text-slate-800 font-medium">{item.key_stat}</p>
+      </div>
+    )}
+
+    {item.key_quote && (
+      <blockquote class="border-l-4 border-slate-400 pl-4 my-6 italic text-slate-700">
+        {item.key_quote}
+      </blockquote>
+    )}
+
     {item.why_it_matters && (
       <div class="bg-blue-50 border-l-4 border-brand p-4 my-6 rounded-r">
         <p class="text-sm font-semibold text-brand-dark uppercase tracking-wide mb-1">Why it matters</p>
         <p class="text-slate-800">{item.why_it_matters}</p>
+      </div>
+    )}
+
+    {item.key_takeaways && item.key_takeaways.length > 0 && (
+      <div class="bg-slate-50 border border-slate-200 rounded-lg p-5 my-6">
+        <p class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">Key takeaways</p>
+        <ul class="space-y-2">
+          {item.key_takeaways.map(point => (
+            <li class="flex gap-2 text-slate-800 text-sm">
+              <span class="text-brand font-bold shrink-0" aria-hidden="true">→</span>
+              {point}
+            </li>
+          ))}
+        </ul>
       </div>
     )}
 
