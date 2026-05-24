@@ -154,6 +154,20 @@ export const GET: APIRoute = async ({ request, url }) => {
 
   const dryRun = url.searchParams.get('dryRun') === '1';
   const backfill = url.searchParams.get('backfill') === '1';
+  const debug = url.searchParams.get('debug') === '1';
+
+  // Debug: report env var presence (not values) when ?debug=1
+  if (debug) {
+    const keys = ['ANTHROPIC_API_KEY', 'FIRECRAWL_API_KEY', 'APIFY_TOKEN', 'SUPABASE_URL', 'CRON_SECRET', 'EMAIL_PROVIDER'];
+    const envReport: Record<string, boolean> = {};
+    for (const k of keys) {
+      envReport[k] = !!(((import.meta as any).env?.[k]) || process.env[k]);
+    }
+    return new Response(JSON.stringify({ env: envReport }), {
+      status: 200, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   const existing = await getExistingUrls();
   const supa = adminClient();
 
