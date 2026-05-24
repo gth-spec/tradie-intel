@@ -4,10 +4,5 @@
       "path": "/api/cron/refresh-feeds",
       "schedule": "0 20 * * *"
     }
-  ],
-  "functions": {
-    "src/pages/api/cron/refresh-feeds.ts": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }
