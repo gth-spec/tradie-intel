@@ -12,3 +12,5 @@ coverage/
 # Supabase local CLI state (Docker volumes, generated types, etc.)
 supabase/.branches
 supabase/.temp
+.vercel
+.env*
