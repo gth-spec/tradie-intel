@@ -15,6 +15,10 @@ export interface FeedItem {
   tags: string[];
   slug: string;
   created_at: string;
+  question_headline: string | null;
+  key_stat: string | null;
+  key_quote: string | null;
+  key_takeaways: string[];
 }
 
 let _adminClient: SupabaseClient | null = null;
