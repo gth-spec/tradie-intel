@@ -125,4 +125,18 @@ describe('parseEnrichmentResponse', () => {
     const result = parseEnrichmentResponse('```json\n' + json + '\n```');
     expect(result.questionHeadline).toBe('What?');
   });
+
+  it('handles omitted key_stat and key_quote (LLM may skip optional fields)', () => {
+    const result = parseEnrichmentResponse(JSON.stringify({
+      summary: 'Test',
+      why_it_matters: 'Matters.',
+      relevance_score: 50,
+      tags: [],
+      question_headline: 'What?',
+      key_takeaways: []
+      // key_stat and key_quote deliberately omitted
+    }));
+    expect(result.keyStat).toBeNull();
+    expect(result.keyQuote).toBeNull();
+  });
 });

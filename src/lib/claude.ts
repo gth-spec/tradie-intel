@@ -15,11 +15,11 @@ const MAX_TAKEAWAYS = 4;
 const EnrichmentResponseSchema = z.object({
   summary: z.string().min(1),
   why_it_matters: z.string().min(1),
-  relevance_score: z.number(),
+  relevance_score: z.number().finite(),
   tags: z.array(z.string()).default([]),
   question_headline: z.string().min(1),
-  key_stat: z.string().nullable().default(null),
-  key_quote: z.string().nullable().default(null),
+  key_stat: z.string().nullish().default(null),
+  key_quote: z.string().nullish().default(null),
   key_takeaways: z.array(z.string()).default([])
 });
 
@@ -96,11 +96,11 @@ export function parseEnrichmentResponse(text: string): Enrichment {
   return {
     summary: truncate(validated.summary.trim(), MAX_SUMMARY_CHARS),
     whyItMatters: truncate(validated.why_it_matters.trim(), MAX_WHY_CHARS),
-    relevanceScore: Math.max(0, Math.min(100, Math.round(validated.relevance_score) || 0)),
+    relevanceScore: Math.max(0, Math.min(100, Math.round(validated.relevance_score))),
     tags: normaliseTags(validated.tags.map(String)),
     questionHeadline: truncate(validated.question_headline.trim(), MAX_QUESTION_HEADLINE_CHARS),
-    keyStat: validated.key_stat ? truncate(validated.key_stat.trim(), MAX_KEY_STAT_CHARS) : null,
-    keyQuote: validated.key_quote ? truncate(validated.key_quote.trim(), MAX_KEY_QUOTE_CHARS) : null,
+    keyStat: validated.key_stat?.trim() ? truncate(validated.key_stat.trim(), MAX_KEY_STAT_CHARS) : null,
+    keyQuote: validated.key_quote?.trim() ? truncate(validated.key_quote.trim(), MAX_KEY_QUOTE_CHARS) : null,
     keyTakeaways: takeaways
   };
 }
