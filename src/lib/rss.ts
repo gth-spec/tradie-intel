@@ -1,8 +1,11 @@
 import Parser from 'rss-parser';
 
+// Use a browser-like UA - some feeds (e.g. Energy Magazine) block bot-identified crawlers.
+const RSS_UA = 'Mozilla/5.0 (compatible; TradieIntel/1.0; +https://tradieintel.com.au)';
+
 const parser = new Parser({
   timeout: 15000,
-  headers: { 'User-Agent': 'TradieIntel/1.0 (+https://tradieintel.com.au)' }
+  headers: { 'User-Agent': RSS_UA }
 });
 
 export interface RssItem {
@@ -26,7 +29,7 @@ export async function parseFeedXml(xml: string): Promise<RssItem[]> {
 
 export async function fetchFeed(url: string, opts?: { signal?: AbortSignal }): Promise<RssItem[]> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'TradieIntel/1.0 (+https://tradieintel.com.au)' },
+    headers: { 'User-Agent': RSS_UA },
     signal: opts?.signal
   });
   if (!res.ok) throw new Error(`Feed ${url} returned HTTP ${res.status}`);

@@ -44,7 +44,7 @@ export const FEEDS: FeedSource[] = [
   { name: 'Master Builders AU News',       url: 'https://masterbuilders.com.au/Newsroom',                   type: 'scrape', category: 'industry',   enabled: true },
   { name: 'Fair Work Ombudsman News',      url: 'https://www.fairwork.gov.au/about-us/news-and-media-releases', type: 'scrape', category: 'regulatory', enabled: true },
   { name: 'Safe Work Australia News',      url: 'https://www.safeworkaustralia.gov.au/media-centre',        type: 'scrape', category: 'regulatory', enabled: true },
-  { name: 'ABCC News',                     url: 'https://www.abcc.gov.au/news-and-media',                   type: 'scrape', category: 'regulatory', enabled: true }
+  { name: 'ABCC News',                     url: 'https://www.abcc.gov.au/news-and-media',                   type: 'scrape', category: 'regulatory', enabled: false } // DEFUNCT: ABCC abolished 2022, domain dead
 ];
 
 // Note: Use `enabled: false` to disable a source without removing it.
