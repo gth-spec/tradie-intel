@@ -31,11 +31,14 @@ export const FEEDS: FeedSource[] = [
   { name: 'Business.gov.au',               url: 'https://business.gov.au/news/feed', type: 'rss', category: 'government', enabled: false }, // FAILED (404)
   { name: 'BOM Severe Weather AU',         url: 'http://www.bom.gov.au/fwo/IDZ00056.warnings_national.xml', type: 'rss', category: 'weather', enabled: false }, // FAILED (404)
 
+  // ── RSS sources (added post-launch) ─────────────────────────────────────
+  { name: 'Energy Magazine AU',            url: 'https://www.energymagazine.com.au/feed/', type: 'rss', category: 'industry', enabled: true }, // energy/electrical trades
+
   // ── Scrape sources (Firecrawl, verified in Task 6.7) ─────────────────────
   // Starter set covering categories the broken RSS feeds left empty.
   // Each is a news/index page that lists multiple recent articles.
-  { name: 'Plumbing Connection',           url: 'https://plumbingconnection.com.au/news/',                  type: 'scrape', category: 'news',       enabled: true },
-  { name: 'Electrical Connection',         url: 'https://electricalconnection.com.au/news/',                type: 'scrape', category: 'news',       enabled: true },
+  { name: 'Plumbing Connection',           url: 'https://plumbingconnection.com.au/news/',                  type: 'scrape', category: 'news',       enabled: false }, // BLOCKED: Cloudflare WAF 403
+  { name: 'Electrical Connection',         url: 'https://electricalconnection.com.au/news/',                type: 'scrape', category: 'news',       enabled: false }, // BLOCKED: Cloudflare WAF 403
   { name: 'Sourceable',                    url: 'https://sourceable.net/',                                  type: 'scrape', category: 'news',       enabled: true },
   { name: 'HIA News',                      url: 'https://hia.com.au/our-industry/newsroom',                 type: 'scrape', category: 'industry',   enabled: true },
   { name: 'Master Builders AU News',       url: 'https://masterbuilders.com.au/Newsroom',                   type: 'scrape', category: 'industry',   enabled: true },
