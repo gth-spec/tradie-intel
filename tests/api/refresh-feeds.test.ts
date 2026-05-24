@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { authoriseCron, dedupeAgainstExisting, withinMaxAge } from '@/pages/api/cron/refresh-feeds';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { authoriseCron, dedupeAgainstExisting, withinMaxAge, processItem } from '@/pages/api/cron/refresh-feeds';
+import * as claude from '@/lib/claude';
+import type { Enrichment } from '@/lib/claude';
 
 describe('authoriseCron', () => {
   it('accepts matching bearer token', () => {
@@ -41,5 +43,41 @@ describe('withinMaxAge', () => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
     expect(withinMaxAge(d, 14)).toBe(false);
+  });
+});
+
+describe('processItem', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('maps GEO enrichment fields to InsertRow', async () => {
+    const mockEnrichment: Enrichment = {
+      summary: 'Test summary',
+      whyItMatters: 'Test why it matters',
+      relevanceScore: 85,
+      tags: ['plumbing', 'new-requirements'],
+      questionHeadline: 'How will this affect my business?',
+      keyStat: '$50 million in government funding',
+      keyQuote: 'This will change everything - John Smith, CEO',
+      keyTakeaways: ['First takeaway', 'Second takeaway']
+    };
+
+    vi.spyOn(claude, 'enrich').mockResolvedValue(mockEnrichment);
+
+    const item = {
+      title: 'Test Article',
+      url: 'https://example.com/article',
+      content: 'Test content here',
+      publishedAt: new Date('2026-05-24')
+    };
+
+    const row = await processItem(item, 'TestFeed', 'https://example.com/feed');
+
+    expect(row).not.toBeNull();
+    expect(row?.question_headline).toBe(mockEnrichment.questionHeadline);
+    expect(row?.key_stat).toBe(mockEnrichment.keyStat);
+    expect(row?.key_quote).toBe(mockEnrichment.keyQuote);
+    expect(row?.key_takeaways).toEqual(mockEnrichment.keyTakeaways);
   });
 });

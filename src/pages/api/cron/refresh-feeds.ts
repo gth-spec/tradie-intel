@@ -106,9 +106,13 @@ interface InsertRow {
   relevance_score: number;
   tags: string[];
   slug: string;
+  question_headline: string | null;
+  key_stat: string | null;
+  key_quote: string | null;
+  key_takeaways: string[];
 }
 
-async function processItem(item: IngestedItem, feedName: string, feedUrl: string): Promise<InsertRow | null> {
+export async function processItem(item: IngestedItem, feedName: string, feedUrl: string): Promise<InsertRow | null> {
   try {
     const enr = await enrich({ title: item.title, content: item.content });
     return {
@@ -123,7 +127,11 @@ async function processItem(item: IngestedItem, feedName: string, feedUrl: string
       why_it_matters: enr.whyItMatters,
       relevance_score: enr.relevanceScore,
       tags: enr.tags,
-      slug: titleToSlug(item.title, item.url.slice(-6).replace(/[^a-z0-9]/gi, ''))
+      slug: titleToSlug(item.title, item.url.slice(-6).replace(/[^a-z0-9]/gi, '')),
+      question_headline: enr.questionHeadline,
+      key_stat: enr.keyStat,
+      key_quote: enr.keyQuote,
+      key_takeaways: enr.keyTakeaways
     };
   } catch (err) {
     console.error('Enrichment failed for', item.url, err);
