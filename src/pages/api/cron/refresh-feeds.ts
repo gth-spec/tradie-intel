@@ -172,46 +172,64 @@ export const GET: APIRoute = async ({ request, url }) => {
     per_feed: [] as Array<{ name: string; type: string; ok: boolean; error?: string; new_items?: number }>
   };
 
+  const enabledFeeds = FEEDS.filter(f => f.enabled);
+
+  // Fetch all feeds in parallel - eliminates sequential wait time.
+  // Each feed gets its own timeout signal so a slow source can't block others.
+  const feedResults = await Promise.allSettled(
+    enabledFeeds.map(async feed => {
+      const items = await fetchSource(feed, AbortSignal.timeout(PER_FEED_TIMEOUT_MS), summary);
+      return { feed, items };
+    })
+  );
+
+  // Apply cap and insert sequentially (preserves deterministic cap behaviour).
   let remainingCap = MAX_NEW_ITEMS_PER_RUN;
 
-  for (const feed of FEEDS.filter(f => f.enabled)) {
+  for (const result of feedResults) {
+    summary.feeds_processed++;
+
+    if (result.status === 'rejected') {
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      summary.items_errored++;
+      // Find the corresponding feed for error reporting
+      const idx = feedResults.indexOf(result);
+      const feed = enabledFeeds[idx];
+      summary.per_feed.push({ name: feed?.name ?? 'unknown', type: feed?.type ?? 'unknown', ok: false, error: message });
+      console.error('Feed failed:', message);
+      continue;
+    }
+
+    const { feed, items } = result.value;
+
     if (remainingCap <= 0) {
       summary.capped_at_max = true;
       summary.per_feed.push({ name: feed.name, type: feed.type, ok: true, new_items: 0 });
       continue;
     }
 
-    summary.feeds_processed++;
-    try {
-      const items = await fetchSource(feed, AbortSignal.timeout(PER_FEED_TIMEOUT_MS), summary);
-      summary.items_fetched += items.length;
+    summary.items_fetched += items.length;
 
-      const fresh = dedupeAgainstExisting(items, existing);
-      summary.items_skipped_existing += items.length - fresh.length;
+    const fresh = dedupeAgainstExisting(items, existing);
+    summary.items_skipped_existing += items.length - fresh.length;
 
-      const withinAge = backfill ? fresh : fresh.filter(i => withinMaxAge(i.publishedAt));
-      summary.items_skipped_age += fresh.length - withinAge.length;
+    const withinAge = backfill ? fresh : fresh.filter(i => withinMaxAge(i.publishedAt));
+    summary.items_skipped_age += fresh.length - withinAge.length;
 
-      const capped = withinAge.slice(0, remainingCap);
-      summary.items_new += capped.length;
-      remainingCap -= capped.length;
+    const capped = withinAge.slice(0, remainingCap);
+    summary.items_new += capped.length;
+    remainingCap -= capped.length;
 
-      for (const item of capped) {
-        const row = await processItem(item, feed.name, feed.url);
-        if (!row) { summary.items_errored++; continue; }
-        if (dryRun) { summary.items_inserted++; continue; }
-        const res = await insertWithSlugRetry(supa, row);
-        if (res.ok) { summary.items_inserted++; existing.add(item.url); }
-        else { summary.items_errored++; console.error('Insert failed', res.error); }
-      }
-
-      summary.per_feed.push({ name: feed.name, type: feed.type, ok: true, new_items: capped.length });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      summary.items_errored++;
-      summary.per_feed.push({ name: feed.name, type: feed.type, ok: false, error: message });
-      console.error('Feed failed:', feed.name, err);
+    for (const item of capped) {
+      const row = await processItem(item, feed.name, feed.url);
+      if (!row) { summary.items_errored++; continue; }
+      if (dryRun) { summary.items_inserted++; continue; }
+      const res = await insertWithSlugRetry(supa, row);
+      if (res.ok) { summary.items_inserted++; existing.add(item.url); }
+      else { summary.items_errored++; console.error('Insert failed', res.error); }
     }
+
+    summary.per_feed.push({ name: feed.name, type: feed.type, ok: true, new_items: capped.length });
   }
 
   return new Response(JSON.stringify(summary), {
