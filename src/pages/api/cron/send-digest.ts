@@ -20,6 +20,9 @@ const SITE_URL = 'https://tradieintel.com.au';
 
 export const GET: APIRoute = async ({ request, url }) => {
   const secret = (import.meta.env.CRON_SECRET ?? process.env.CRON_SECRET ?? '') as string;
+  if (!secret) {
+    return new Response('Server misconfigured: CRON_SECRET not set', { status: 500 });
+  }
   if (!authoriseCron(request, secret)) {
     return new Response('Unauthorised', { status: 401 });
   }
