@@ -4,7 +4,7 @@ import { verifyApproveToken, scheduleLoopsBroadcast } from '@/lib/digest';
 
 export const prerender = false;
 
-function htmlPage(title: string, heading: string, message: string, isError = false): Response {
+function htmlPage(title: string, heading: string, message: string, isError = false, status = 200): Response {
   const color = isError ? '#dc2626' : '#0f766e';
   const icon = isError ? '⚠' : '✓';
   const html = `<!DOCTYPE html>
@@ -25,6 +25,7 @@ function htmlPage(title: string, heading: string, message: string, isError = fal
 </body>
 </html>`;
   return new Response(html, {
+    status,
     headers: { 'Content-Type': 'text/html; charset=utf-8' }
   });
 }
@@ -32,10 +33,7 @@ function htmlPage(title: string, heading: string, message: string, isError = fal
 export const GET: APIRoute = async ({ url }) => {
   const token = url.searchParams.get('token');
   if (!token) {
-    return new Response(
-      htmlPage('Error', 'Invalid link', 'This approval link is missing its token.', true).body,
-      { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-    );
+    return htmlPage('Error', 'Invalid link', 'This approval link is missing its token.', true, 400);
   }
 
   const secret = (import.meta.env.CRON_SECRET ?? process.env.CRON_SECRET ?? '') as string;
@@ -47,16 +45,14 @@ export const GET: APIRoute = async ({ url }) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     const isExpired = msg.includes('expired');
-    return new Response(
-      htmlPage(
-        isExpired ? 'Link expired' : 'Error',
-        isExpired ? 'This approval link has expired' : 'Invalid approval link',
-        isExpired
-          ? 'This digest run has been marked as expired. If you need to send a digest, trigger a new cron run.'
-          : 'This link is not valid.',
-        true
-      ).body,
-      { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    return htmlPage(
+      isExpired ? 'Link expired' : 'Error',
+      isExpired ? 'This approval link has expired' : 'Invalid approval link',
+      isExpired
+        ? 'This digest run has been marked as expired. If you need to send a digest, trigger a new cron run.'
+        : 'This link is not valid.',
+      true,
+      400
     );
   }
 
@@ -69,42 +65,40 @@ export const GET: APIRoute = async ({ url }) => {
     .single();
 
   if (runError || !run) {
-    return new Response(
-      htmlPage('Error', 'Run not found', 'This digest run could not be found.', true).body,
-      { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-    );
+    return htmlPage('Error', 'Run not found', 'This digest run could not be found.', true, 404);
   }
 
   const typedRun = run as { id: string; status: string; broadcast_id: string | null };
 
   if (typedRun.status !== 'draft') {
     const alreadyDone = typedRun.status === 'approved' || typedRun.status === 'sent';
-    return new Response(
-      htmlPage(
-        alreadyDone ? 'Already approved' : 'Cannot approve',
-        alreadyDone ? 'Digest already approved' : 'This digest cannot be approved',
-        alreadyDone
-          ? 'This digest has already been approved and is scheduled to send.'
-          : `The digest run status is '${typedRun.status}' and cannot be approved.`,
-        !alreadyDone
-      ).body,
-      { status: 409, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    return htmlPage(
+      alreadyDone ? 'Already approved' : 'Cannot approve',
+      alreadyDone ? 'Digest already approved' : 'This digest cannot be approved',
+      alreadyDone
+        ? 'This digest has already been approved and is scheduled to send.'
+        : 'This digest run cannot be approved in its current state.',
+      !alreadyDone,
+      409
     );
   }
 
   await scheduleLoopsBroadcast(loopsApiKey, payload.broadcast_id);
 
-  await supa
+  const { error: updateError } = await supa
     .from('digest_runs')
     .update({ status: 'approved', approved_at: new Date().toISOString() })
     .eq('id', payload.run_id);
 
-  return new Response(
-    htmlPage(
-      'Digest approved',
-      'Digest approved',
-      'The digest has been approved and is scheduled to send to subscribers in approximately 15 minutes.'
-    ).body,
-    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  if (updateError) {
+    return htmlPage('Error', 'Update failed', 'The broadcast was scheduled but the run record could not be updated. Please check the digest_runs table.', true, 500);
+  }
+
+  return htmlPage(
+    'Digest approved',
+    'Digest approved',
+    'The digest has been approved and is scheduled to send to subscribers in approximately 15 minutes.',
+    false,
+    200
   );
 };

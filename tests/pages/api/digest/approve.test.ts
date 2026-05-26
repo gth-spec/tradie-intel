@@ -83,14 +83,12 @@ describe('GET /api/digest/approve', () => {
   });
 
   it('returns 409 HTML error page when run is already approved', async () => {
+    vi.resetModules();
     const { adminClient } = await import('@/lib/supabase');
     (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('approved'));
-
-    vi.resetModules();
     const { GET } = await import('@/pages/api/digest/approve');
     const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
     const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
-
     expect(res.status).toBe(409);
   });
 
