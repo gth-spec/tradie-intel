@@ -7,16 +7,18 @@ import {
   getLastDigestArticleIds,
   selectArticles,
   getDateRange,
-  buildEmailHtml,
+  buildEmailLmx,
   buildQaEmailHtml,
-  createLoopsBroadcast,
-  sendQaEmail,
-  signApproveToken
+  createLoopsDraftCampaign,
+  updateLoopsEmailMessage,
+  sendQaEmail
 } from '@/lib/digest';
 
 export const prerender = false;
 
-const SITE_URL = 'https://tradieintel.com.au';
+function loopsCampaignUrl(campaignId: string): string {
+  return `https://app.loops.so/campaigns/${campaignId}`;
+}
 
 export const GET: APIRoute = async ({ request, url }) => {
   const secret = (import.meta.env.CRON_SECRET ?? process.env.CRON_SECRET ?? '') as string;
@@ -40,7 +42,7 @@ export const GET: APIRoute = async ({ request, url }) => {
   // 1. Clean up stale drafts from previous runs
   await cleanupStaleDrafts(supa);
 
-  // 2. Duplicate guard - abort if a digest was already sent/approved/drafted this week
+  // 2. Duplicate guard - abort if a digest was already drafted this week
   const alreadyRan = await hasRecentDigestRun(supa);
   if (alreadyRan) {
     summary.skipped = true;
@@ -60,13 +62,15 @@ export const GET: APIRoute = async ({ request, url }) => {
 
   // 4. Abort if not enough articles
   if (articles.length < 3) {
-    const skipMeta = { article_count: articles.length, lookback_days: lookbackDays, dry_run: dryRun };
-
     if (!dryRun) {
       await supa.from('digest_runs').insert({
         status: 'skipped',
         article_ids: [],
-        metadata: { ...skipMeta, skip_reason: 'insufficient_articles' }
+        metadata: {
+          article_count: articles.length,
+          lookback_days: lookbackDays,
+          skip_reason: 'insufficient_articles'
+        }
       });
 
       if (agentmailKey) {
@@ -89,46 +93,53 @@ export const GET: APIRoute = async ({ request, url }) => {
     });
   }
 
-  // 5. Build the email HTML
-  const emailHtml = buildEmailHtml(articles, dateRange);
+  // 5. Build LMX content
+  const lmx = buildEmailLmx(articles, dateRange);
   const startLabel = dateRange.start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
   const endLabel = dateRange.end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
   const subject = `This week in trades: ${startLabel} - ${endLabel}`;
-  const preheaderText = articles[0].ai_summary.slice(0, 140);
+  const previewText = articles[0].ai_summary.slice(0, 140);
 
   summary.subject = subject;
   summary.articles = articles.map(a => ({ id: a.id, title: a.title, score: a.relevance_score }));
 
   if (dryRun) {
-    summary.dry_run_html_length = emailHtml.length;
+    summary.dry_run_lmx_length = lmx.length;
     return new Response(JSON.stringify(summary), {
       status: 200, headers: { 'Content-Type': 'application/json' }
     });
   }
 
-  // 6. Create Loops broadcast draft
+  // 6. Create Loops draft campaign
   const campaignName = `Weekly Digest - ${new Date().toISOString().slice(0, 10)}`;
-  const broadcastId = await createLoopsBroadcast(loopsApiKey, {
-    name: campaignName,
+  const draft = await createLoopsDraftCampaign(loopsApiKey, campaignName);
+
+  summary.campaign_id = draft.campaignId;
+
+  // 7. Update the email message with LMX content
+  await updateLoopsEmailMessage(loopsApiKey, {
+    emailMessageId: draft.emailMessageId,
+    expectedRevisionId: draft.contentRevisionId,
     subject,
-    preheaderText,
-    htmlBody: emailHtml
+    previewText,
+    lmx
   });
 
-  summary.broadcast_id = broadcastId;
-
-  // 7. Insert digest_runs row as 'draft'
+  // 8. Insert digest_runs row as 'draft' - this run stays in 'draft' status forever
+  //    since send is manual via Loops UI. We could later add a webhook to update it.
   const { data: runData, error: runError } = await supa
     .from('digest_runs')
     .insert({
       status: 'draft',
-      broadcast_id: broadcastId,
+      broadcast_id: draft.campaignId,
       article_ids: articles.map(a => a.id),
       metadata: {
         subject,
         article_count: articles.length,
         lookback_days: lookbackDays,
-        campaign_name: campaignName
+        campaign_name: campaignName,
+        email_message_id: draft.emailMessageId,
+        loops_campaign_url: loopsCampaignUrl(draft.campaignId)
       }
     })
     .select('id')
@@ -138,27 +149,31 @@ export const GET: APIRoute = async ({ request, url }) => {
     throw new Error(`Failed to insert digest_runs row: ${runError?.message}`);
   }
 
-  const runId = runData.id as string;
-  summary.run_id = runId;
+  summary.run_id = (runData as { id: string }).id;
 
-  // 8. Sign approve token and send QA email
-  const approveToken = signApproveToken(runId, broadcastId, secret);
-  const approveUrl = `${SITE_URL}/api/digest/approve?token=${encodeURIComponent(approveToken)}`;
-
-  const qaHtml = buildQaEmailHtml({ articles, dateRange, approveUrl, runId });
+  // 9. Send QA email pointing to the Loops UI for review + manual send
+  const loopsUrl = loopsCampaignUrl(draft.campaignId);
+  const qaHtml = buildQaEmailHtml({
+    articles,
+    dateRange,
+    approveUrl: loopsUrl,
+    runId: (runData as { id: string }).id
+  });
 
   try {
     await sendQaEmail(agentmailKey, {
-      subject: `[APPROVE REQUIRED] TradieIntel digest - ${startLabel} - ${endLabel}`,
+      subject: `[REVIEW] TradieIntel digest draft - ${startLabel} - ${endLabel}`,
       html: qaHtml,
-      approveUrl
+      approveUrl: loopsUrl
     });
     summary.qa_email_sent = true;
   } catch (e) {
-    console.warn('AgentMail QA send failed (broadcast still created):', e);
+    console.warn('AgentMail QA send failed (Loops draft still created):', e);
     summary.qa_email_sent = false;
     summary.qa_email_error = e instanceof Error ? e.message : String(e);
   }
+
+  summary.loops_campaign_url = loopsUrl;
 
   return new Response(JSON.stringify(summary), {
     status: 200, headers: { 'Content-Type': 'application/json' }
