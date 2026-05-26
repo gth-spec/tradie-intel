@@ -111,7 +111,8 @@ export async function selectArticles(opts: {
   for (const days of [7, 14]) {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    let query = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query: any = supabase
       .from('feed_items')
       .select('id, title, ai_summary, why_it_matters, original_url, source, published_at, relevance_score')
       .eq('niche', niche)
@@ -125,7 +126,7 @@ export async function selectArticles(opts: {
       query = query.not('id', 'in', `(${excludeIds.join(',')})`);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await query as { data: unknown[] | null; error: { message: string } | null };
     if (error) throw error;
 
     const items = (data ?? []) as DigestItem[];
