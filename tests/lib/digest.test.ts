@@ -352,3 +352,80 @@ describe('scheduleLoopsBroadcast', () => {
     await expect(scheduleLoopsBroadcast('loops-api-key', 'bad-id')).rejects.toThrow('Loops campaign schedule error: 404');
   });
 });
+
+// ── AgentMail QA send ────────────────────────────────────────────────────────
+
+describe('sendQaEmail', () => {
+  const originalFetch = global.fetch;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('sends to the approver email with correct Authorization header', async () => {
+    const { sendQaEmail } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await sendQaEmail('agentmail-key', {
+      subject: '[APPROVE REQUIRED] Test digest',
+      html: '<p>test</p>',
+      approveUrl: 'https://tradieintel.com.au/api/digest/approve?token=abc'
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer agentmail-key');
+    const body = JSON.parse(init.body as string) as { to: string[] };
+    expect(body.to).toContain('gth@gthdigitalmarketing.com.au');
+  });
+
+  it('throws on non-200 response', async () => {
+    const { sendQaEmail } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response('Bad Request', { status: 400 }));
+    await expect(sendQaEmail('bad-key', {
+      subject: 'Test', html: '<p>test</p>', approveUrl: 'https://example.com'
+    })).rejects.toThrow('AgentMail send error: 400');
+  });
+});
+
+describe('cleanupStaleDrafts', () => {
+  it('marks old draft runs as expired', async () => {
+    vi.resetModules();
+    const { cleanupStaleDrafts } = await import('@/lib/digest');
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
+    const supa = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockResolvedValue({
+          data: [{ id: 'stale-run-1', broadcast_id: 'camp-1' }],
+          error: null
+        }),
+        update: updateMock
+      })
+    } as unknown as SupabaseClient;
+    await cleanupStaleDrafts(supa);
+    expect(updateMock).toHaveBeenCalledWith({ status: 'expired' });
+  });
+
+  it('does nothing when no stale drafts exist', async () => {
+    vi.resetModules();
+    const { cleanupStaleDrafts } = await import('@/lib/digest');
+    const updateMock = vi.fn();
+    const supa = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockResolvedValue({ data: [], error: null }),
+        update: updateMock
+      })
+    } as unknown as SupabaseClient;
+    await cleanupStaleDrafts(supa);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+});
