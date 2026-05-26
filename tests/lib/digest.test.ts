@@ -265,3 +265,90 @@ describe('getDateRange', () => {
     expect(diffDays).toBeCloseTo(7, 0);
   });
 });
+
+// ── Loops API client ─────────────────────────────────────────────────────────
+
+describe('createLoopsBroadcast', () => {
+  const originalFetch = global.fetch;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('returns campaign id from Loops API response', async () => {
+    const { createLoopsBroadcast } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'campaign-xyz' }), { status: 200 })
+    );
+    const id = await createLoopsBroadcast('loops-api-key', {
+      name: 'Weekly Digest - 2026-05-26',
+      subject: 'This week in trades: 19-25 May',
+      preheaderText: 'Top 5 articles for your week.',
+      htmlBody: '<html>test</html>'
+    });
+    expect(id).toBe('campaign-xyz');
+  });
+
+  it('sends correct Authorization header', async () => {
+    const { createLoopsBroadcast } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'campaign-abc' }), { status: 200 })
+    );
+    await createLoopsBroadcast('my-loops-key', {
+      name: 'Test', subject: 'Test', preheaderText: 'Test', htmlBody: '<p>test</p>'
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer my-loops-key');
+  });
+
+  it('throws on non-200 response', async () => {
+    const { createLoopsBroadcast } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(
+      new Response('Unauthorized', { status: 401 })
+    );
+    await expect(createLoopsBroadcast('bad-key', {
+      name: 'Test', subject: 'Test', preheaderText: 'Test', htmlBody: '<p>test</p>'
+    })).rejects.toThrow('Loops campaign create error: 401');
+  });
+});
+
+describe('scheduleLoopsBroadcast', () => {
+  const originalFetch = global.fetch;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('calls the correct campaign endpoint with sendAt', async () => {
+    const { scheduleLoopsBroadcast } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await scheduleLoopsBroadcast('loops-api-key', 'campaign-123');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('campaign-123');
+    const body = JSON.parse(init.body as string) as { sendAt: string };
+    expect(body.sendAt).toBeTruthy();
+    const sendAt = new Date(body.sendAt).getTime();
+    expect(sendAt).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
+    expect(sendAt).toBeLessThan(Date.now() + 16 * 60 * 1000);
+  });
+
+  it('throws on non-200 response', async () => {
+    const { scheduleLoopsBroadcast } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
+    await expect(scheduleLoopsBroadcast('loops-api-key', 'bad-id')).rejects.toThrow('Loops campaign schedule error: 404');
+  });
+});

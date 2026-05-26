@@ -220,3 +220,47 @@ export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): st
 </body>
 </html>`;
 }
+
+// ── Loops API client ──────────────────────────────────────────────────────────
+// Endpoints based on Loops API conventions - verify against https://loops.so/docs/api-reference
+// before first live deploy. Endpoint paths may differ from what's shown here.
+
+export async function createLoopsBroadcast(apiKey: string, opts: {
+  name: string;
+  subject: string;
+  preheaderText: string;
+  htmlBody: string;
+}): Promise<string> {
+  const res = await fetch('https://app.loops.so/api/v1/campaigns', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      name: opts.name,
+      subject: opts.subject,
+      preheaderText: opts.preheaderText,
+      htmlBody: opts.htmlBody,
+      type: 'html'
+    })
+  });
+  if (!res.ok) throw new Error(`Loops campaign create error: ${res.status} ${await res.text()}`);
+  const data = await res.json() as { id?: string; campaignId?: string };
+  const id = data.id ?? data.campaignId;
+  if (!id) throw new Error('Loops campaign create: no id in response');
+  return id;
+}
+
+export async function scheduleLoopsBroadcast(apiKey: string, campaignId: string): Promise<void> {
+  const sendAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const res = await fetch(`https://app.loops.so/api/v1/campaigns/${campaignId}/send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({ sendAt })
+  });
+  if (!res.ok) throw new Error(`Loops campaign schedule error: ${res.status} ${await res.text()}`);
+}
