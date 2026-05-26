@@ -2,52 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DigestItem } from '@/lib/digest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// ── Token utilities ──────────────────────────────────────────────────────────
-
-describe('signApproveToken / verifyApproveToken', () => {
-  const SECRET = 'test-secret-32-chars-minimum-abc';
-  const RUN_ID = '550e8400-e29b-41d4-a716-446655440000';
-  const BROADCAST_ID = 'loops-broadcast-abc123';
-
-  it('round-trips: sign then verify returns original payload', async () => {
-    const { signApproveToken, verifyApproveToken } = await import('@/lib/digest');
-    const token = signApproveToken(RUN_ID, BROADCAST_ID, SECRET);
-    const payload = verifyApproveToken(token, SECRET);
-    expect(payload.run_id).toBe(RUN_ID);
-    expect(payload.broadcast_id).toBe(BROADCAST_ID);
-    expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
-  });
-
-  it('throws on tampered payload', async () => {
-    const { signApproveToken, verifyApproveToken } = await import('@/lib/digest');
-    const token = signApproveToken(RUN_ID, BROADCAST_ID, SECRET);
-    const [payload, sig] = token.split('.');
-    const tampered = `${payload}x.${sig}`;
-    expect(() => verifyApproveToken(tampered, SECRET)).toThrow('Invalid token signature');
-  });
-
-  it('throws on wrong secret', async () => {
-    const { signApproveToken, verifyApproveToken } = await import('@/lib/digest');
-    const token = signApproveToken(RUN_ID, BROADCAST_ID, SECRET);
-    expect(() => verifyApproveToken(token, 'wrong-secret')).toThrow('Invalid token signature');
-  });
-
-  it('throws on expired token', async () => {
-    const { signApproveToken, verifyApproveToken } = await import('@/lib/digest');
-    vi.useFakeTimers();
-    const token = signApproveToken(RUN_ID, BROADCAST_ID, SECRET);
-    // Advance time by 8 days to expire the 7-day token
-    vi.advanceTimersByTime(8 * 24 * 60 * 60 * 1000);
-    expect(() => verifyApproveToken(token, SECRET)).toThrow('Token expired');
-    vi.useRealTimers();
-  });
-
-  it('throws on malformed token (missing dot separator)', async () => {
-    const { verifyApproveToken } = await import('@/lib/digest');
-    expect(() => verifyApproveToken('nodothere', SECRET)).toThrow('Invalid token format');
-  });
-});
-
 // ── Article selection ────────────────────────────────────────────────────────
 
 function makeItem(overrides: Partial<DigestItem> = {}): DigestItem {
@@ -69,7 +23,7 @@ describe('selectArticles', () => {
     vi.resetModules();
     const { selectArticles } = await import('@/lib/digest');
     const items = Array.from({ length: 8 }, (_, i) => makeItem({ id: `uuid-${i}`, relevance_score: 90 - i }));
-    
+
     const mockChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -79,7 +33,7 @@ describe('selectArticles', () => {
       limit: vi.fn().mockResolvedValue({ data: items, error: null }),
       in: vi.fn().mockReturnThis()
     };
-    
+
     const supa = {
       from: vi.fn().mockReturnValue(mockChain)
     } as unknown as SupabaseClient;
@@ -92,7 +46,7 @@ describe('selectArticles', () => {
     vi.resetModules();
     const { selectArticles } = await import('@/lib/digest');
     let callCount = 0;
-    
+
     const mockChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -108,7 +62,7 @@ describe('selectArticles', () => {
       }),
       in: vi.fn().mockReturnThis()
     };
-    
+
     const supa = {
       from: vi.fn().mockReturnValue(mockChain)
     } as unknown as SupabaseClient;
@@ -121,7 +75,7 @@ describe('selectArticles', () => {
     vi.resetModules();
     const { selectArticles } = await import('@/lib/digest');
     const items = [makeItem(), makeItem({ id: 'uuid-2' })];
-    
+
     const mockChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -131,7 +85,7 @@ describe('selectArticles', () => {
       limit: vi.fn().mockResolvedValue({ data: items, error: null }),
       in: vi.fn().mockReturnThis()
     };
-    
+
     const supa = {
       from: vi.fn().mockReturnValue(mockChain)
     } as unknown as SupabaseClient;
@@ -143,7 +97,7 @@ describe('selectArticles', () => {
     vi.resetModules();
     const { selectArticles } = await import('@/lib/digest');
     const items = Array.from({ length: 5 }, (_, i) => makeItem({ id: `uuid-${i}` }));
-    
+
     const mockChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -153,7 +107,7 @@ describe('selectArticles', () => {
       limit: vi.fn().mockResolvedValue({ data: items, error: null }),
       in: vi.fn().mockReturnThis()
     };
-    
+
     const supa = {
       from: vi.fn().mockReturnValue(mockChain)
     } as unknown as SupabaseClient;
@@ -169,14 +123,14 @@ describe('hasRecentDigestRun', () => {
   it('returns true when a recent draft/approved/sent run exists', async () => {
     vi.resetModules();
     const { hasRecentDigestRun } = await import('@/lib/digest');
-    
+
     const mockChain = {
       select: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({ data: [{ id: 'some-run-id' }], error: null })
     };
-    
+
     const supa = {
       from: vi.fn().mockReturnValue(mockChain)
     } as unknown as SupabaseClient;
@@ -186,14 +140,14 @@ describe('hasRecentDigestRun', () => {
   it('returns false when no recent run exists', async () => {
     vi.resetModules();
     const { hasRecentDigestRun } = await import('@/lib/digest');
-    
+
     const mockChain = {
       select: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({ data: [], error: null })
     };
-    
+
     const supa = {
       from: vi.fn().mockReturnValue(mockChain)
     } as unknown as SupabaseClient;
@@ -201,74 +155,54 @@ describe('hasRecentDigestRun', () => {
   });
 });
 
-// ── Email HTML builder ───────────────────────────────────────────────────────
+// ── LMX email builder ────────────────────────────────────────────────────────
 
-describe('buildEmailHtml', () => {
-  it('includes all article titles in output', async () => {
+describe('buildEmailLmx', () => {
+  it('produces valid LMX with Style, H1, and article blocks', async () => {
     vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
+    const { buildEmailLmx } = await import('@/lib/digest');
     const articles = [
-      makeItem({ title: 'Plumbing code update 2026', ai_summary: 'Summary one.', why_it_matters: 'Affects all plumbers.' }),
-      makeItem({ id: 'uuid-2', title: 'HVAC regulations change', ai_summary: 'Summary two.', why_it_matters: 'Affects HVAC operators.' })
+      makeItem({ title: 'Plumbing code update', ai_summary: 'Summary.', why_it_matters: 'Affects plumbers.' })
     ];
-    const dateRange = { start: new Date('2026-05-19'), end: new Date('2026-05-25') };
-    const html = buildEmailHtml(articles, dateRange);
-    expect(html).toContain('Plumbing code update 2026');
-    expect(html).toContain('HVAC regulations change');
+    const lmx = buildEmailLmx(articles, { start: new Date('2026-05-19'), end: new Date('2026-05-25') });
+    expect(lmx).toContain('<Style />');
+    expect(lmx).toContain('<H1>This week in trades</H1>');
+    expect(lmx).toContain('<H2><Link href="https://example.com/article">Plumbing code update</Link></H2>');
+    expect(lmx).toContain('19 May');
+    expect(lmx).toContain('25 May');
   });
 
-  it('includes date range in output', async () => {
+  it('escapes special characters in titles', async () => {
     vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const html = buildEmailHtml(
-      [makeItem()],
-      { start: new Date('2026-05-19'), end: new Date('2026-05-25') }
-    );
-    expect(html).toContain('19 May');
-    expect(html).toContain('25 May');
+    const { buildEmailLmx } = await import('@/lib/digest');
+    const articles = [makeItem({ title: 'A & B <script>', ai_summary: 'Body' })];
+    const lmx = buildEmailLmx(articles, { start: new Date(), end: new Date() });
+    expect(lmx).not.toContain('<script>');
+    expect(lmx).toContain('A &amp; B &lt;script&gt;');
   });
 
-  it('escapes HTML special characters in article content', async () => {
+  it('escapes ampersands in URLs', async () => {
     vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const article = makeItem({ title: 'Test <script>alert(1)</script>', ai_summary: 'Safe & clean.' });
-    const html = buildEmailHtml([article], { start: new Date(), end: new Date() });
-    expect(html).not.toContain('<script>');
-    expect(html).toContain('&lt;script&gt;');
-    expect(html).toContain('Safe &amp; clean.');
+    const { buildEmailLmx } = await import('@/lib/digest');
+    const articles = [makeItem({ original_url: 'https://example.com/x?a=1&b=2' })];
+    const lmx = buildEmailLmx(articles, { start: new Date(), end: new Date() });
+    expect(lmx).toContain('https://example.com/x?a=1&amp;b=2');
   });
 
-  it('includes preview text as hidden div', async () => {
+  it('includes one Divider per article plus separator dividers', async () => {
     vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const article = makeItem({ ai_summary: 'This is the first article summary for preview.' });
-    const html = buildEmailHtml([article], { start: new Date(), end: new Date() });
-    expect(html).toContain('This is the first article summary for preview.');
-    expect(html).toMatch(/display:none[^>]*>This is the first/);
-  });
-
-  it('includes unsubscribe placeholder', async () => {
-    vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const html = buildEmailHtml([makeItem()], { start: new Date(), end: new Date() });
-    expect(html).toContain('{{unsubscribe_link}}');
+    const { buildEmailLmx } = await import('@/lib/digest');
+    const articles = [makeItem(), makeItem({ id: 'uuid-2' })];
+    const lmx = buildEmailLmx(articles, { start: new Date(), end: new Date() });
+    const dividerCount = (lmx.match(/<Divider \/>/g) ?? []).length;
+    // 1 divider before articles + 1 divider per article = 3
+    expect(dividerCount).toBe(3);
   });
 });
 
-describe('getDateRange', () => {
-  it('returns a 7-day window ending at the time of call', async () => {
-    vi.resetModules();
-    const { getDateRange } = await import('@/lib/digest');
-    const range = getDateRange();
-    const diffMs = range.end.getTime() - range.start.getTime();
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    expect(diffDays).toBeCloseTo(7, 0);
-  });
-});
+// ── Loops API client (new flow) ──────────────────────────────────────────────
 
-// ── Loops API client ─────────────────────────────────────────────────────────
-
-describe('createLoopsBroadcast', () => {
+describe('createLoopsDraftCampaign', () => {
   const originalFetch = global.fetch;
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -282,44 +216,33 @@ describe('createLoopsBroadcast', () => {
     vi.resetModules();
   });
 
-  it('returns campaign id from Loops API response', async () => {
-    const { createLoopsBroadcast } = await import('@/lib/digest');
+  it('returns ids from Loops API response', async () => {
+    const { createLoopsDraftCampaign } = await import('@/lib/digest');
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'campaign-xyz' }), { status: 200 })
+      new Response(JSON.stringify({
+        campaignId: 'cmp-1',
+        emailMessageId: 'em-1',
+        emailMessageContentRevisionId: 'rev-1'
+      }), { status: 201 })
     );
-    const id = await createLoopsBroadcast('loops-api-key', {
-      name: 'Weekly Digest - 2026-05-26',
-      subject: 'This week in trades: 19-25 May',
-      preheaderText: 'Top 5 articles for your week.',
-      htmlBody: '<html>test</html>'
-    });
-    expect(id).toBe('campaign-xyz');
+    const result = await createLoopsDraftCampaign('loops-key', 'Test Campaign');
+    expect(result).toEqual({ campaignId: 'cmp-1', emailMessageId: 'em-1', contentRevisionId: 'rev-1' });
   });
 
-  it('sends correct Authorization header', async () => {
-    const { createLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'campaign-abc' }), { status: 200 })
-    );
-    await createLoopsBroadcast('my-loops-key', {
-      name: 'Test', subject: 'Test', preheaderText: 'Test', htmlBody: '<p>test</p>'
-    });
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer my-loops-key');
+  it('throws when response missing IDs', async () => {
+    const { createLoopsDraftCampaign } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ campaignId: 'cmp-1' }), { status: 201 }));
+    await expect(createLoopsDraftCampaign('loops-key', 'Test')).rejects.toThrow('missing IDs');
   });
 
-  it('throws on non-200 response', async () => {
-    const { createLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(
-      new Response('Unauthorized', { status: 401 })
-    );
-    await expect(createLoopsBroadcast('bad-key', {
-      name: 'Test', subject: 'Test', preheaderText: 'Test', htmlBody: '<p>test</p>'
-    })).rejects.toThrow('Loops campaign create error: 401');
+  it('throws on non-2xx response', async () => {
+    const { createLoopsDraftCampaign } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+    await expect(createLoopsDraftCampaign('bad-key', 'Test')).rejects.toThrow('Loops campaign create error: 401');
   });
 });
 
-describe('scheduleLoopsBroadcast', () => {
+describe('updateLoopsEmailMessage', () => {
   const originalFetch = global.fetch;
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -333,23 +256,34 @@ describe('scheduleLoopsBroadcast', () => {
     vi.resetModules();
   });
 
-  it('calls the correct campaign endpoint with sendAt', async () => {
-    const { scheduleLoopsBroadcast } = await import('@/lib/digest');
+  it('POSTs to the email-messages endpoint with expectedRevisionId, subject, previewText, lmx', async () => {
+    const { updateLoopsEmailMessage } = await import('@/lib/digest');
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-    await scheduleLoopsBroadcast('loops-api-key', 'campaign-123');
+    await updateLoopsEmailMessage('loops-key', {
+      emailMessageId: 'em-1',
+      expectedRevisionId: 'rev-1',
+      subject: 'Subject',
+      previewText: 'Preview',
+      lmx: '<Style />\n<H1>Title</H1>'
+    });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('campaign-123');
-    const body = JSON.parse(init.body as string) as { sendAt: string };
-    expect(body.sendAt).toBeTruthy();
-    const sendAt = new Date(body.sendAt).getTime();
-    expect(sendAt).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
-    expect(sendAt).toBeLessThan(Date.now() + 16 * 60 * 1000);
+    expect(url).toBe('https://app.loops.so/api/v1/email-messages/em-1');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({
+      expectedRevisionId: 'rev-1',
+      subject: 'Subject',
+      previewText: 'Preview',
+      lmx: '<Style />\n<H1>Title</H1>'
+    });
   });
 
-  it('throws on non-200 response', async () => {
-    const { scheduleLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
-    await expect(scheduleLoopsBroadcast('loops-api-key', 'bad-id')).rejects.toThrow('Loops campaign schedule error: 404');
+  it('throws on non-2xx response', async () => {
+    const { updateLoopsEmailMessage } = await import('@/lib/digest');
+    fetchMock.mockResolvedValueOnce(new Response('Conflict', { status: 409 }));
+    await expect(updateLoopsEmailMessage('loops-key', {
+      emailMessageId: 'em-1', expectedRevisionId: 'rev-1', subject: 'x', previewText: 'x', lmx: '<Style />'
+    })).rejects.toThrow('Loops email message update error: 409');
   });
 });
 
@@ -427,5 +361,16 @@ describe('cleanupStaleDrafts', () => {
     } as unknown as SupabaseClient;
     await cleanupStaleDrafts(supa);
     expect(updateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('getDateRange', () => {
+  it('returns a 7-day window ending at the time of call', async () => {
+    vi.resetModules();
+    const { getDateRange } = await import('@/lib/digest');
+    const range = getDateRange();
+    const diffMs = range.end.getTime() - range.start.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    expect(diffDays).toBeCloseTo(7, 0);
   });
 });

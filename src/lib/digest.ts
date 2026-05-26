@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 // Used by article selection functions added in later tasks.
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -26,12 +25,6 @@ export interface DigestRun {
   metadata: Record<string, unknown> | null;
 }
 
-export interface ApproveTokenPayload {
-  run_id: string;
-  broadcast_id: string;
-  exp: number;
-}
-
 export interface SelectArticlesResult {
   articles: DigestItem[];
   lookbackDays: number;
@@ -42,38 +35,10 @@ export interface DateRange {
   end: Date;
 }
 
-// ── Token utilities ───────────────────────────────────────────────────────────
-
-export function signApproveToken(runId: string, broadcastId: string, secret: string): string {
-  const payload: ApproveTokenPayload = {
-    run_id: runId,
-    broadcast_id: broadcastId,
-    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
-  };
-  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  return `${payloadB64}.${sig}`;
-}
-
-export function verifyApproveToken(token: string, secret: string): ApproveTokenPayload {
-  const dotIdx = token.indexOf('.');
-  if (dotIdx === -1) throw new Error('Invalid token format');
-  const payloadB64 = token.slice(0, dotIdx);
-  const sig = token.slice(dotIdx + 1);
-  const expected = createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  const expectedBuf = Buffer.from(expected, 'ascii');
-  const sigBuf = Buffer.from(sig, 'ascii');
-  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
-    throw new Error('Invalid token signature');
-  }
-  let payload: ApproveTokenPayload;
-  try {
-    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as ApproveTokenPayload;
-  } catch {
-    throw new Error('Invalid token format');
-  }
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
-  return payload;
+export interface CreateLoopsDraftResult {
+  campaignId: string;
+  emailMessageId: string;
+  contentRevisionId: string;
 }
 
 // ── Article selection ─────────────────────────────────────────────────────────
@@ -138,14 +103,16 @@ export async function selectArticles(opts: {
   return { articles: [], lookbackDays: 14 };
 }
 
-// ── Email HTML builder ────────────────────────────────────────────────────────
+// ── Email LMX builder ─────────────────────────────────────────────────────────
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function escapeLmxAttr(s: string): string {
+  // For attribute values in Link href etc.
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function escapeLmxText(s: string): string {
+  // For text content - escape < > & to prevent breaking the LMX parser
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function formatShortDate(d: Date): string {
@@ -158,112 +125,73 @@ export function getDateRange(): DateRange {
   return { start, end };
 }
 
-export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): string {
+export function buildEmailLmx(articles: DigestItem[], dateRange: DateRange): string {
   const startLabel = formatShortDate(dateRange.start);
   const endLabel = formatShortDate(dateRange.end);
-  const rangeLabel = `${startLabel} - ${endLabel}`;
-  const previewText = articles[0]
-    ? articles[0].ai_summary.slice(0, 140)
-    : 'Your weekly trades industry intelligence.';
 
-  const articlesHtml = articles.map(a => `
-      <tr>
-        <td style="padding:24px 0;border-bottom:1px solid #e5e7eb;">
-          <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;line-height:1.3;">
-            <a href="${escapeHtml(a.original_url)}" style="color:#0f766e;text-decoration:none;">${escapeHtml(a.title)}</a>
-          </h2>
-          <p style="margin:0 0 8px;font-size:15px;color:#374151;line-height:1.6;">${escapeHtml(a.ai_summary)}</p>
-          <p style="margin:0 0 12px;font-size:13px;color:#6b7280;font-style:italic;">${escapeHtml(a.why_it_matters)}</p>
-          <span style="font-size:12px;color:#9ca3af;">${escapeHtml(a.source)}</span>
-          <a href="${escapeHtml(a.original_url)}" style="margin-left:12px;font-size:13px;color:#0f766e;">Read more →</a>
-        </td>
-      </tr>`).join('');
+  const articleBlocks = articles.map(a => `
+<H2><Link href="${escapeLmxAttr(a.original_url)}">${escapeLmxText(a.title)}</Link></H2>
+<Paragraph>${escapeLmxText(a.ai_summary)}</Paragraph>
+<Paragraph><Em>${escapeLmxText(a.why_it_matters)}</Em></Paragraph>
+<Paragraph>${escapeLmxText(a.source)} · <Link href="${escapeLmxAttr(a.original_url)}">Read more →</Link></Paragraph>
+<Divider />`).join('\n');
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>This week in trades: ${escapeHtml(rangeLabel)}</title>
-</head>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f9fafb;">${escapeHtml(previewText)}</div>
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9fafb;">
-  <tr><td align="center" style="padding:32px 16px;">
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
-      <tr>
-        <td style="background:#0f766e;padding:24px 32px;">
-          <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">TradieIntel</h1>
-          <p style="margin:6px 0 0;color:#99f6e4;font-size:13px;">Weekly Intel - ${escapeHtml(rangeLabel)}</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:24px 32px 0;">
-          <p style="margin:0;font-size:15px;color:#374151;line-height:1.6;">Here's what's worth knowing in the trades sector this week.</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:0 32px;">
-          <table width="100%" cellpadding="0" cellspacing="0" border="0">
-            ${articlesHtml}
-          </table>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:32px;background:#f9fafb;text-align:center;border-top:1px solid #e5e7eb;">
-          <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">You're receiving this because you subscribed at tradieintel.com.au</p>
-          <p style="margin:0;font-size:12px;color:#9ca3af;">© GrokoryAI - <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a></p>
-        </td>
-      </tr>
-    </table>
-  </td></tr>
-</table>
-</body>
-</html>`;
+  return `<Style />
+<H1>This week in trades</H1>
+<Paragraph>${escapeLmxText(`Here's what's worth knowing in the trades sector this week (${startLabel} - ${endLabel}).`)}</Paragraph>
+<Divider />
+${articleBlocks}
+<Paragraph><Em>You're receiving this because you subscribed at tradieintel.com.au</Em></Paragraph>`;
 }
 
 // ── Loops API client ──────────────────────────────────────────────────────────
-// Endpoints based on Loops API conventions - verify against https://loops.so/docs/api-reference
-// before first live deploy. Endpoint paths may differ from what's shown here.
 
-export async function createLoopsBroadcast(apiKey: string, opts: {
-  name: string;
-  subject: string;
-  preheaderText: string;
-  htmlBody: string;
-}): Promise<string> {
+export async function createLoopsDraftCampaign(apiKey: string, name: string): Promise<CreateLoopsDraftResult> {
   const res = await fetch('https://app.loops.so/api/v1/campaigns', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      name: opts.name,
-      subject: opts.subject,
-      preheaderText: opts.preheaderText,
-      htmlBody: opts.htmlBody,
-      type: 'html'
-    })
+    body: JSON.stringify({ name })
   });
   if (!res.ok) throw new Error(`Loops campaign create error: ${res.status} ${await res.text()}`);
-  const data = await res.json() as { id?: string; campaignId?: string };
-  const id = data.id ?? data.campaignId;
-  if (!id) throw new Error('Loops campaign create: no id in response');
-  return id;
+  const data = await res.json() as {
+    campaignId?: string;
+    emailMessageId?: string;
+    emailMessageContentRevisionId?: string;
+  };
+  if (!data.campaignId || !data.emailMessageId || !data.emailMessageContentRevisionId) {
+    throw new Error('Loops campaign create: missing IDs in response');
+  }
+  return {
+    campaignId: data.campaignId,
+    emailMessageId: data.emailMessageId,
+    contentRevisionId: data.emailMessageContentRevisionId
+  };
 }
 
-export async function scheduleLoopsBroadcast(apiKey: string, campaignId: string): Promise<void> {
-  const sendAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  const res = await fetch(`https://app.loops.so/api/v1/campaigns/${campaignId}/send`, {
+export async function updateLoopsEmailMessage(apiKey: string, opts: {
+  emailMessageId: string;
+  expectedRevisionId: string;
+  subject: string;
+  previewText: string;
+  lmx: string;
+}): Promise<void> {
+  const res = await fetch(`https://app.loops.so/api/v1/email-messages/${opts.emailMessageId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
     },
-    body: JSON.stringify({ sendAt })
+    body: JSON.stringify({
+      expectedRevisionId: opts.expectedRevisionId,
+      subject: opts.subject,
+      previewText: opts.previewText,
+      lmx: opts.lmx
+    })
   });
-  if (!res.ok) throw new Error(`Loops campaign schedule error: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`Loops email message update error: ${res.status} ${await res.text()}`);
 }
 
 // ── AgentMail QA send ─────────────────────────────────────────────────────────
@@ -272,6 +200,14 @@ export async function scheduleLoopsBroadcast(apiKey: string, campaignId: string)
 
 const DIGEST_APPROVER_EMAIL = 'gth@gthdigitalmarketing.com.au';
 const QA_INBOX = 'tradieintel-qa';
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 export function buildQaEmailHtml(opts: {
   articles: DigestItem[];
