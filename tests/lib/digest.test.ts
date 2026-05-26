@@ -307,9 +307,9 @@ describe('sendQaEmail', () => {
     const { sendQaEmail } = await import('@/lib/digest');
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     await sendQaEmail('agentmail-key', {
-      subject: '[APPROVE REQUIRED] Test digest',
+      subject: '[REVIEW] Test digest',
       html: '<p>test</p>',
-      approveUrl: 'https://tradieintel.com.au/api/digest/approve?token=abc'
+      approveUrl: 'https://app.loops.so/campaigns/cmp-test'
     });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer agentmail-key');
