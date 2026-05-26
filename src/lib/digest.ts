@@ -1,4 +1,5 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+// Used by article selection functions added in later tasks.
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -60,8 +61,17 @@ export function verifyApproveToken(token: string, secret: string): ApproveTokenP
   const payloadB64 = token.slice(0, dotIdx);
   const sig = token.slice(dotIdx + 1);
   const expected = createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  if (sig !== expected) throw new Error('Invalid token signature');
-  const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as ApproveTokenPayload;
+  const expectedBuf = Buffer.from(expected, 'ascii');
+  const sigBuf = Buffer.from(sig, 'ascii');
+  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+    throw new Error('Invalid token signature');
+  }
+  let payload: ApproveTokenPayload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as ApproveTokenPayload;
+  } catch {
+    throw new Error('Invalid token format');
+  }
   if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
   return payload;
 }
