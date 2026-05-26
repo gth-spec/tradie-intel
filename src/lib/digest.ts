@@ -136,3 +136,87 @@ export async function selectArticles(opts: {
 
   return { articles: [], lookbackDays: 14 };
 }
+
+// ── Email HTML builder ────────────────────────────────────────────────────────
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatShortDate(d: Date): string {
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+}
+
+export function getDateRange(): DateRange {
+  const end = new Date();
+  const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): string {
+  const startLabel = formatShortDate(dateRange.start);
+  const endLabel = formatShortDate(dateRange.end);
+  const rangeLabel = `${startLabel} - ${endLabel}`;
+  const previewText = articles[0]
+    ? articles[0].ai_summary.slice(0, 140)
+    : 'Your weekly trades industry intelligence.';
+
+  const articlesHtml = articles.map(a => `
+      <tr>
+        <td style="padding:24px 0;border-bottom:1px solid #e5e7eb;">
+          <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;line-height:1.3;">
+            <a href="${escapeHtml(a.original_url)}" style="color:#0f766e;text-decoration:none;">${escapeHtml(a.title)}</a>
+          </h2>
+          <p style="margin:0 0 8px;font-size:15px;color:#374151;line-height:1.6;">${escapeHtml(a.ai_summary)}</p>
+          <p style="margin:0 0 12px;font-size:13px;color:#6b7280;font-style:italic;">${escapeHtml(a.why_it_matters)}</p>
+          <span style="font-size:12px;color:#9ca3af;">${escapeHtml(a.source)}</span>
+          <a href="${escapeHtml(a.original_url)}" style="margin-left:12px;font-size:13px;color:#0f766e;">Read more →</a>
+        </td>
+      </tr>`).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>This week in trades: ${escapeHtml(rangeLabel)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f9fafb;">${escapeHtml(previewText)}</div>
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9fafb;">
+  <tr><td align="center" style="padding:32px 16px;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
+      <tr>
+        <td style="background:#0f766e;padding:24px 32px;">
+          <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">TradieIntel</h1>
+          <p style="margin:6px 0 0;color:#99f6e4;font-size:13px;">Weekly Intel - ${escapeHtml(rangeLabel)}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:24px 32px 0;">
+          <p style="margin:0;font-size:15px;color:#374151;line-height:1.6;">Here's what's worth knowing in the trades sector this week.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:0 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            ${articlesHtml}
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:32px;background:#f9fafb;text-align:center;border-top:1px solid #e5e7eb;">
+          <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">You're receiving this because you subscribed at tradieintel.com.au</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">© GrokoryAI - <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a></p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}

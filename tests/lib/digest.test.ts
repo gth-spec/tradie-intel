@@ -200,3 +200,68 @@ describe('hasRecentDigestRun', () => {
     expect(await hasRecentDigestRun(supa)).toBe(false);
   });
 });
+
+// ── Email HTML builder ───────────────────────────────────────────────────────
+
+describe('buildEmailHtml', () => {
+  it('includes all article titles in output', async () => {
+    vi.resetModules();
+    const { buildEmailHtml } = await import('@/lib/digest');
+    const articles = [
+      makeItem({ title: 'Plumbing code update 2026', ai_summary: 'Summary one.', why_it_matters: 'Affects all plumbers.' }),
+      makeItem({ id: 'uuid-2', title: 'HVAC regulations change', ai_summary: 'Summary two.', why_it_matters: 'Affects HVAC operators.' })
+    ];
+    const dateRange = { start: new Date('2026-05-19'), end: new Date('2026-05-25') };
+    const html = buildEmailHtml(articles, dateRange);
+    expect(html).toContain('Plumbing code update 2026');
+    expect(html).toContain('HVAC regulations change');
+  });
+
+  it('includes date range in output', async () => {
+    vi.resetModules();
+    const { buildEmailHtml } = await import('@/lib/digest');
+    const html = buildEmailHtml(
+      [makeItem()],
+      { start: new Date('2026-05-19'), end: new Date('2026-05-25') }
+    );
+    expect(html).toContain('19 May');
+    expect(html).toContain('25 May');
+  });
+
+  it('escapes HTML special characters in article content', async () => {
+    vi.resetModules();
+    const { buildEmailHtml } = await import('@/lib/digest');
+    const article = makeItem({ title: 'Test <script>alert(1)</script>', ai_summary: 'Safe & clean.' });
+    const html = buildEmailHtml([article], { start: new Date(), end: new Date() });
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('Safe &amp; clean.');
+  });
+
+  it('includes preview text as hidden div', async () => {
+    vi.resetModules();
+    const { buildEmailHtml } = await import('@/lib/digest');
+    const article = makeItem({ ai_summary: 'This is the first article summary for preview.' });
+    const html = buildEmailHtml([article], { start: new Date(), end: new Date() });
+    expect(html).toContain('This is the first article summary for preview.');
+    expect(html).toMatch(/display:none[^>]*>This is the first/);
+  });
+
+  it('includes unsubscribe placeholder', async () => {
+    vi.resetModules();
+    const { buildEmailHtml } = await import('@/lib/digest');
+    const html = buildEmailHtml([makeItem()], { start: new Date(), end: new Date() });
+    expect(html).toContain('{{unsubscribe_link}}');
+  });
+});
+
+describe('getDateRange', () => {
+  it('returns a 7-day window ending at the time of call', async () => {
+    vi.resetModules();
+    const { getDateRange } = await import('@/lib/digest');
+    const range = getDateRange();
+    const diffMs = range.end.getTime() - range.start.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    expect(diffDays).toBeCloseTo(7, 0);
+  });
+});
