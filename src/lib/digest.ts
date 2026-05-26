@@ -75,3 +75,64 @@ export function verifyApproveToken(token: string, secret: string): ApproveTokenP
   if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
   return payload;
 }
+
+// ── Article selection ─────────────────────────────────────────────────────────
+
+export async function getLastDigestArticleIds(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('digest_runs')
+    .select('article_ids')
+    .in('status', ['approved', 'sent'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return (data?.[0]?.article_ids ?? []) as string[];
+}
+
+export async function hasRecentDigestRun(supabase: SupabaseClient): Promise<boolean> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('digest_runs')
+    .select('id')
+    .in('status', ['draft', 'approved', 'sent'])
+    .gte('created_at', cutoff)
+    .limit(1);
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
+
+export async function selectArticles(opts: {
+  supabase: SupabaseClient;
+  niche?: string;
+  excludeIds?: string[];
+}): Promise<SelectArticlesResult> {
+  const { supabase, niche = 'trades', excludeIds = [] } = opts;
+
+  for (const days of [7, 14]) {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    let query = supabase
+      .from('feed_items')
+      .select('id, title, ai_summary, why_it_matters, original_url, source, published_at, relevance_score')
+      .eq('niche', niche)
+      .not('relevance_score', 'is', null)
+      .not('ai_summary', 'is', null)
+      .gte('published_at', cutoff)
+      .order('relevance_score', { ascending: false })
+      .limit(20);
+
+    if (excludeIds.length > 0) {
+      query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const items = (data ?? []) as DigestItem[];
+    if (items.length >= 3) {
+      return { articles: items.slice(0, 5), lookbackDays: days };
+    }
+  }
+
+  return { articles: [], lookbackDays: 14 };
+}
