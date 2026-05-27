@@ -298,7 +298,7 @@ export async function deleteResendBroadcast(
 // ── AgentMail QA send ─────────────────────────────────────────────────────────
 // Sends FROM tradieintel-qa@agentmail.to TO the approver's email address.
 
-const QA_INBOX = 'tradieintel-qa';
+const QA_INBOX = 'tradieintel-qa@agentmail.to';
 
 function approverEmail(): string {
   return (import.meta.env.DIGEST_APPROVER_EMAIL
@@ -340,7 +340,7 @@ export async function sendQaEmail(apiKey: string, opts: {
   subject: string;
   html: string;
 }): Promise<void> {
-  const res = await fetch(`https://api.agentmail.to/v0/inboxes/${QA_INBOX}/messages`, {
+  const res = await fetch(`https://api.agentmail.to/v0/inboxes/${QA_INBOX}/messages/send`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

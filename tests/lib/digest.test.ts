@@ -372,17 +372,21 @@ describe('sendQaEmail', () => {
     vi.resetModules();
   });
 
-  it('sends to the approver email with correct Authorization header', async () => {
+  it('POSTs /v0/inboxes/{full-inbox-id}/messages/send with Authorization and to[]', async () => {
     const { sendQaEmail } = await import('@/lib/digest');
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     await sendQaEmail('agentmail-key', {
       subject: '[REVIEW] Test digest',
       html: '<p>test</p>'
     });
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.agentmail.to/v0/inboxes/tradieintel-qa@agentmail.to/messages/send');
+    expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer agentmail-key');
-    const body = JSON.parse(init.body as string) as { to: string[] };
+    const body = JSON.parse(init.body as string) as { to: string[]; subject: string; html: string };
     expect(body.to).toContain('hello@tradieintel.com.au');
+    expect(body.subject).toBe('[REVIEW] Test digest');
+    expect(body.html).toBe('<p>test</p>');
   });
 
   it('throws on non-200 response', async () => {
