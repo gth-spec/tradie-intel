@@ -7,11 +7,18 @@ import { publicClient } from '@/lib/supabase';
 import { SITE } from '@/config/site';
 import { selectRelated } from '@/lib/related';
 import type { FeedItem } from '@/lib/supabase';
+import { SLUG_REDIRECTS } from '@/lib/slug-redirects';
 
 export const prerender = false;
 
 const { slug } = Astro.params;
 if (!slug) return Astro.redirect('/news');
+
+// 301 legacy slugs (mangled by the old URL-derived-suffix bug, fixed 2026-05-27)
+// to their canonical clean equivalents. Preserves inbound links from digest emails
+// and external shares. See scripts/backfill-slugs.mjs.
+const canonical = SLUG_REDIRECTS[slug];
+if (canonical) return Astro.redirect(`/news/${canonical}`, 301);
 
 const supa = publicClient();
 const { data: itemData } = await supa

@@ -127,7 +127,11 @@ export async function processItem(item: IngestedItem, feedName: string, feedUrl:
       why_it_matters: enr.whyItMatters,
       relevance_score: enr.relevanceScore,
       tags: enr.tags,
-      slug: titleToSlug(item.title, item.url.slice(-6).replace(/[^a-z0-9]/gi, '')),
+      // Clean slug from title only. Collision protection lives in insertWithSlugRetry()
+      // below, which appends -2, -3, ... on unique-constraint violation. A URL-derived
+      // suffix used to be passed here but produced nonsense-looking slugs (e.g.
+      // ...supply-strains-rains, ...businesss-nesss) without adding real uniqueness.
+      slug: titleToSlug(item.title),
       question_headline: enr.questionHeadline,
       key_stat: enr.keyStat,
       key_quote: enr.keyQuote,
