@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 describe('signApproveToken / verifyApproveToken', () => {
   const SECRET = 'test-secret-32-chars-minimum-abc';
   const RUN_ID = '550e8400-e29b-41d4-a716-446655440000';
-  const BROADCAST_ID = 'loops-broadcast-abc123';
+  const BROADCAST_ID = 'bc-abc123';
 
   it('round-trips: sign then verify returns original payload', async () => {
     const { signApproveToken, verifyApproveToken } = await import('@/lib/digest');
@@ -377,20 +377,19 @@ describe('sendQaEmail', () => {
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     await sendQaEmail('agentmail-key', {
       subject: '[REVIEW] Test digest',
-      html: '<p>test</p>',
-      approveUrl: 'https://app.loops.so/campaigns/cmp-test'
+      html: '<p>test</p>'
     });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer agentmail-key');
     const body = JSON.parse(init.body as string) as { to: string[] };
-    expect(body.to).toContain('gth@gthdigitalmarketing.com.au');
+    expect(body.to).toContain('hello@tradieintel.com.au');
   });
 
   it('throws on non-200 response', async () => {
     const { sendQaEmail } = await import('@/lib/digest');
     fetchMock.mockResolvedValueOnce(new Response('Bad Request', { status: 400 }));
     await expect(sendQaEmail('bad-key', {
-      subject: 'Test', html: '<p>test</p>', approveUrl: 'https://example.com'
+      subject: 'Test', html: '<p>test</p>'
     })).rejects.toThrow('AgentMail send error: 400');
   });
 });

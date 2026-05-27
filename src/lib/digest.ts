@@ -283,10 +283,14 @@ export async function sendResendBroadcast(
 
 // ── AgentMail QA send ─────────────────────────────────────────────────────────
 // Sends FROM tradieintel-qa@agentmail.to TO the approver's email address.
-// API docs: https://agentmail.to/docs - verify endpoint before deploying.
 
-const DIGEST_APPROVER_EMAIL = 'gth@gthdigitalmarketing.com.au';
 const QA_INBOX = 'tradieintel-qa';
+
+function approverEmail(): string {
+  return (import.meta.env.DIGEST_APPROVER_EMAIL
+    ?? process.env.DIGEST_APPROVER_EMAIL
+    ?? 'hello@tradieintel.com.au') as string;
+}
 
 export function buildQaEmailHtml(opts: {
   articles: DigestItem[];
@@ -303,17 +307,17 @@ export function buildQaEmailHtml(opts: {
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#111;">
-  <h2 style="color:#0f766e;">TradieIntel digest ready for approval</h2>
+  <h2 style="color:#0f766e;">TradieIntel digest draft ready for approval</h2>
   <p><strong>Period:</strong> ${escapeHtml(startLabel)} - ${escapeHtml(endLabel)}</p>
   <p><strong>Articles selected (${opts.articles.length}):</strong></p>
   <ol>${articleList}</ol>
   <p style="margin-top:32px;">
     <a href="${escapeHtml(opts.approveUrl)}"
        style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;">
-      Approve and schedule digest
+      Approve and send
     </a>
   </p>
-  <p style="margin-top:24px;font-size:12px;color:#9ca3af;">This link expires in 7 days. Run ID: ${escapeHtml(opts.runId)}</p>
+  <p style="margin-top:24px;font-size:12px;color:#9ca3af;">Clicking the button verifies a signed token and immediately sends the Resend broadcast to all subscribers in the General segment. Run ID: ${escapeHtml(opts.runId)}</p>
 </body>
 </html>`;
 }
@@ -321,7 +325,6 @@ export function buildQaEmailHtml(opts: {
 export async function sendQaEmail(apiKey: string, opts: {
   subject: string;
   html: string;
-  approveUrl: string;
 }): Promise<void> {
   const res = await fetch(`https://api.agentmail.to/v0/inboxes/${QA_INBOX}/messages`, {
     method: 'POST',
@@ -330,7 +333,7 @@ export async function sendQaEmail(apiKey: string, opts: {
       'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      to: [DIGEST_APPROVER_EMAIL],
+      to: [approverEmail()],
       subject: opts.subject,
       html: opts.html
     })
