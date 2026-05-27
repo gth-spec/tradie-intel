@@ -281,6 +281,20 @@ export async function sendResendBroadcast(
   }
 }
 
+export async function deleteResendBroadcast(
+  apiKey: string,
+  broadcastId: string
+): Promise<void> {
+  const res = await fetch(`https://api.resend.com/broadcasts/${broadcastId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${apiKey}` }
+  });
+  if (res.status === 404) return;
+  if (!res.ok) {
+    throw new Error(`Resend broadcast delete error: ${res.status} ${await res.text()}`);
+  }
+}
+
 // ── AgentMail QA send ─────────────────────────────────────────────────────────
 // Sends FROM tradieintel-qa@agentmail.to TO the approver's email address.
 
@@ -343,7 +357,10 @@ export async function sendQaEmail(apiKey: string, opts: {
 
 // ── Stale draft cleanup ───────────────────────────────────────────────────────
 
-export async function cleanupStaleDrafts(supabase: SupabaseClient): Promise<void> {
+export async function cleanupStaleDrafts(
+  supabase: SupabaseClient,
+  resendKey?: string
+): Promise<void> {
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('digest_runs')
@@ -354,6 +371,13 @@ export async function cleanupStaleDrafts(supabase: SupabaseClient): Promise<void
   if (!data || data.length === 0) return;
 
   for (const run of data as { id: string; broadcast_id: string | null }[]) {
+    if (resendKey && run.broadcast_id) {
+      try {
+        await deleteResendBroadcast(resendKey, run.broadcast_id);
+      } catch (e) {
+        console.warn(`Failed to delete Resend draft ${run.broadcast_id} for run ${run.id}:`, e);
+      }
+    }
     await supabase
       .from('digest_runs')
       .update({ status: 'expired' })

@@ -35,7 +35,7 @@ export const GET: APIRoute = async ({ request, url }) => {
     dry_run: dryRun
   };
 
-  await cleanupStaleDrafts(supa);
+  await cleanupStaleDrafts(supa, resendKey || undefined);
 
   if (await hasRecentDigestRun(supa)) {
     summary.skipped = true;

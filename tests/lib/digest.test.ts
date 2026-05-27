@@ -394,6 +394,41 @@ describe('sendQaEmail', () => {
   });
 });
 
+describe('deleteResendBroadcast', () => {
+  beforeEach(() => { vi.spyOn(global, 'fetch'); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('DELETEs /broadcasts/{id} with Bearer auth and no body', async () => {
+    const { deleteResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ object: 'broadcast', id: 'bc-1', deleted: true }), { status: 200 })
+    );
+    await deleteResendBroadcast('re_key', 'bc-1');
+    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe('https://api.resend.com/broadcasts/bc-1');
+    expect(init.method).toBe('DELETE');
+    expect(init.headers['Authorization']).toBe('Bearer re_key');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('tolerates 404 silently (already deleted)', async () => {
+    const { deleteResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response('not found', { status: 404 })
+    );
+    await expect(deleteResendBroadcast('re_key', 'gone')).resolves.toBeUndefined();
+  });
+
+  it('throws on other non-2xx (e.g. 500)', async () => {
+    const { deleteResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response('server error', { status: 500 })
+    );
+    await expect(deleteResendBroadcast('re_key', 'bc-1'))
+      .rejects.toThrow('Resend broadcast delete error: 500');
+  });
+});
+
 describe('cleanupStaleDrafts', () => {
   it('marks old draft runs as expired', async () => {
     vi.resetModules();
@@ -429,5 +464,88 @@ describe('cleanupStaleDrafts', () => {
     } as unknown as SupabaseClient;
     await cleanupStaleDrafts(supa);
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('deletes the matching Resend draft for each stale row when resendKey is given', async () => {
+    vi.resetModules();
+    const fetchSpy = vi.spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
+    const { cleanupStaleDrafts } = await import('@/lib/digest');
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
+    const supa = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockResolvedValue({
+          data: [
+            { id: 'r-1', broadcast_id: 'bc-1' },
+            { id: 'r-2', broadcast_id: 'bc-2' },
+            { id: 'r-3', broadcast_id: null }
+          ],
+          error: null
+        }),
+        update: updateMock
+      })
+    } as unknown as SupabaseClient;
+    await cleanupStaleDrafts(supa, 're_key');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, 'https://api.resend.com/broadcasts/bc-1', expect.objectContaining({ method: 'DELETE' }));
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, 'https://api.resend.com/broadcasts/bc-2', expect.objectContaining({ method: 'DELETE' }));
+    expect(updateMock).toHaveBeenCalledTimes(3);
+    fetchSpy.mockRestore();
+  });
+
+  it('continues expiring rows when a Resend delete fails', async () => {
+    vi.resetModules();
+    const fetchSpy = vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response('server error', { status: 500 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { cleanupStaleDrafts } = await import('@/lib/digest');
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
+    const supa = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockResolvedValue({
+          data: [
+            { id: 'r-1', broadcast_id: 'bc-1' },
+            { id: 'r-2', broadcast_id: 'bc-2' }
+          ],
+          error: null
+        }),
+        update: updateMock
+      })
+    } as unknown as SupabaseClient;
+    await cleanupStaleDrafts(supa, 're_key');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(updateMock).toHaveBeenCalledTimes(2);
+    fetchSpy.mockRestore();
+    warn.mockRestore();
+  });
+
+  it('skips Resend deletes when no resendKey is given', async () => {
+    vi.resetModules();
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    const { cleanupStaleDrafts } = await import('@/lib/digest');
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
+    const supa = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockResolvedValue({
+          data: [{ id: 'r-1', broadcast_id: 'bc-1' }],
+          error: null
+        }),
+        update: updateMock
+      })
+    } as unknown as SupabaseClient;
+    await cleanupStaleDrafts(supa);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(updateMock).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
   });
 });
