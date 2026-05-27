@@ -8,12 +8,12 @@ vi.mock('@/lib/supabase', () => ({
   adminClient: vi.fn()
 }));
 
-// Mock digest functions - keep real signApproveToken/verifyApproveToken, mock scheduleLoopsBroadcast
+// Mock digest functions - keep real signApproveToken/verifyApproveToken, mock sendResendBroadcast
 vi.mock('@/lib/digest', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/digest')>();
   return {
     ...actual,
-    scheduleLoopsBroadcast: vi.fn().mockResolvedValue(undefined)
+    sendResendBroadcast: vi.fn().mockResolvedValue(undefined)
   };
 });
 
@@ -45,7 +45,7 @@ function makeSupaWithRun(status: string) {
 describe('GET /api/digest/approve', () => {
   beforeEach(() => {
     vi.stubEnv('CRON_SECRET', SECRET);
-    vi.stubEnv('EMAIL_PROVIDER_API_KEY', 'loops-key');
+    vi.stubEnv('RESEND_API_KEY', 're_test_key');
   });
 
   afterEach(() => {
@@ -53,50 +53,95 @@ describe('GET /api/digest/approve', () => {
     vi.resetModules();
   });
 
-  it('returns 200 HTML confirmation page on valid token + draft run', async () => {
+  it('verifies the HMAC token, calls Resend send, and updates digest_runs to sent', async () => {
     const { adminClient } = await import('@/lib/supabase');
     (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('draft'));
 
     const { GET } = await import('@/pages/api/digest/approve');
+    const { sendResendBroadcast } = await import('@/lib/digest');
     const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
     const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
 
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toContain('Digest approved');
+    expect(text).toContain('Digest sent');
     expect(res.headers.get('Content-Type')).toContain('text/html');
+    expect(sendResendBroadcast).toHaveBeenCalledWith('re_test_key', 'campaign-123');
   });
 
-  it('returns 400 HTML error page when token is expired', async () => {
-    vi.useFakeTimers();
-    const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
-    vi.advanceTimersByTime(8 * 24 * 60 * 60 * 1000);
-
-    vi.resetModules();
-    const { GET } = await import('@/pages/api/digest/approve');
-    const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
-
-    expect(res.status).toBe(400);
-    const text = await res.text();
-    expect(text).toContain('expired');
-    vi.useRealTimers();
-  });
-
-  it('returns 409 HTML error page when run is already approved', async () => {
-    vi.resetModules();
-    const { adminClient } = await import('@/lib/supabase');
-    (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('approved'));
-    const { GET } = await import('@/pages/api/digest/approve');
-    const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
-    const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
-    expect(res.status).toBe(409);
-  });
-
-  it('returns 400 when token is missing', async () => {
+  it('returns 400 on missing or malformed token', async () => {
     vi.resetModules();
     const { GET } = await import('@/pages/api/digest/approve');
     const req = new Request('https://tradieintel.com.au/api/digest/approve', { method: 'GET' });
     const res = await GET({ request: req, url: new URL('https://example.com') } as Parameters<typeof GET>[0]);
     expect(res.status).toBe(400);
+  });
+
+  it('returns 401 on bad signature', async () => {
+    vi.resetModules();
+    const { GET } = await import('@/pages/api/digest/approve');
+    const badToken = 'invalid.token.signature';
+    const res = await GET({ request: makeRequest(badToken), url: makeUrl(badToken) } as Parameters<typeof GET>[0]);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 409 when run is already sent', async () => {
+    const { adminClient } = await import('@/lib/supabase');
+    (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('sent'));
+    const { GET } = await import('@/pages/api/digest/approve');
+    const { sendResendBroadcast } = await import('@/lib/digest');
+    vi.mocked(sendResendBroadcast).mockClear();
+    const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
+    const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
+    expect(res.status).toBe(409);
+    const text = await res.text();
+    expect(text).toContain('Not draftable');
+    expect(sendResendBroadcast).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when run has status skipped', async () => {
+    const { adminClient } = await import('@/lib/supabase');
+    (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('skipped'));
+    const { GET } = await import('@/pages/api/digest/approve');
+    const { sendResendBroadcast } = await import('@/lib/digest');
+    vi.mocked(sendResendBroadcast).mockClear();
+    const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
+    const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
+    expect(res.status).toBe(409);
+    const text = await res.text();
+    expect(text).toContain('Not draftable');
+    expect(sendResendBroadcast).not.toHaveBeenCalled();
+  });
+
+  it('returns 502 when sendResendBroadcast throws', async () => {
+    const { adminClient } = await import('@/lib/supabase');
+    const supaStub = makeSupaWithRun('draft');
+    (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(supaStub);
+    const { GET } = await import('@/pages/api/digest/approve');
+    const { sendResendBroadcast } = await import('@/lib/digest');
+    vi.mocked(sendResendBroadcast).mockRejectedValueOnce(new Error('Resend broadcast send error: 500 Internal Server Error'));
+    const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
+    const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
+    expect(res.status).toBe(502);
+    const text = await res.text();
+    expect(text).toContain('Resend send failed');
+    // DB update must NOT have been called
+    expect(supaStub.from().update).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when run id not found', async () => {
+    vi.resetModules();
+    const { adminClient } = await import('@/lib/supabase');
+    (adminClient as ReturnType<typeof vi.fn>).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } })
+      })
+    });
+    const { GET } = await import('@/pages/api/digest/approve');
+    const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
+    const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
+    expect(res.status).toBe(404);
   });
 });
