@@ -266,90 +266,93 @@ describe('getDateRange', () => {
   });
 });
 
-// ── Loops API client ─────────────────────────────────────────────────────────
+// ── Resend API client ────────────────────────────────────────────────────────
 
-describe('createLoopsBroadcast', () => {
-  const originalFetch = global.fetch;
-  let fetchMock: ReturnType<typeof vi.fn>;
+describe('createResendBroadcast', () => {
+  beforeEach(() => { vi.spyOn(global, 'fetch'); });
+  afterEach(() => { vi.restoreAllMocks(); });
 
-  beforeEach(() => {
-    fetchMock = vi.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
-  });
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-    vi.resetModules();
-  });
-
-  it('returns campaign id from Loops API response', async () => {
-    const { createLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'campaign-xyz' }), { status: 200 })
+  it('POSTs to /broadcasts with segment_id, from, subject, html, name and returns id', async () => {
+    const { createResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'bc-123' }), { status: 200 })
     );
-    const id = await createLoopsBroadcast('loops-api-key', {
-      name: 'Weekly Digest - 2026-05-26',
-      subject: 'This week in trades: 19-25 May',
-      preheaderText: 'Top 5 articles for your week.',
-      htmlBody: '<html>test</html>'
+    const id = await createResendBroadcast('re_key', {
+      segmentId: 'seg-1',
+      from: 'TradieIntel <hello@tradieintel.com.au>',
+      subject: 'Weekly digest',
+      html: '<p>hi</p>',
+      name: 'Weekly Digest - 2026-05-27'
     });
-    expect(id).toBe('campaign-xyz');
-  });
-
-  it('sends correct Authorization header', async () => {
-    const { createLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'campaign-abc' }), { status: 200 })
-    );
-    await createLoopsBroadcast('my-loops-key', {
-      name: 'Test', subject: 'Test', preheaderText: 'Test', htmlBody: '<p>test</p>'
+    expect(id).toBe('bc-123');
+    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe('https://api.resend.com/broadcasts');
+    expect(init.method).toBe('POST');
+    expect(init.headers['Authorization']).toBe('Bearer re_key');
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({
+      segment_id: 'seg-1',
+      from: 'TradieIntel <hello@tradieintel.com.au>',
+      subject: 'Weekly digest',
+      html: '<p>hi</p>',
+      name: 'Weekly Digest - 2026-05-27'
     });
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer my-loops-key');
   });
 
-  it('throws on non-200 response', async () => {
-    const { createLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(
-      new Response('Unauthorized', { status: 401 })
+  it('throws when Resend returns a non-2xx', async () => {
+    const { createResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response('bad domain', { status: 422 })
     );
-    await expect(createLoopsBroadcast('bad-key', {
-      name: 'Test', subject: 'Test', preheaderText: 'Test', htmlBody: '<p>test</p>'
-    })).rejects.toThrow('Loops campaign create error: 401');
+    await expect(createResendBroadcast('re_key', {
+      segmentId: 's', from: 'a@b.com', subject: 's', html: '<p/>', name: 'n'
+    })).rejects.toThrow('Resend broadcast create error: 422');
+  });
+
+  it('throws when response is missing id', async () => {
+    const { createResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({}), { status: 200 })
+    );
+    await expect(createResendBroadcast('re_key', {
+      segmentId: 's', from: 'a@b.com', subject: 's', html: '<p/>', name: 'n'
+    })).rejects.toThrow('missing id');
   });
 });
 
-describe('scheduleLoopsBroadcast', () => {
-  const originalFetch = global.fetch;
-  let fetchMock: ReturnType<typeof vi.fn>;
+describe('sendResendBroadcast', () => {
+  beforeEach(() => { vi.spyOn(global, 'fetch'); });
+  afterEach(() => { vi.restoreAllMocks(); });
 
-  beforeEach(() => {
-    fetchMock = vi.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
+  it('POSTs to /broadcasts/{id}/send with empty body when no scheduledAt', async () => {
+    const { sendResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'bc-123' }), { status: 200 })
+    );
+    await sendResendBroadcast('re_key', 'bc-123');
+    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe('https://api.resend.com/broadcasts/bc-123/send');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({});
   });
 
-  afterEach(() => {
-    global.fetch = originalFetch;
-    vi.resetModules();
+  it('passes scheduled_at when provided', async () => {
+    const { sendResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'bc-123' }), { status: 200 })
+    );
+    await sendResendBroadcast('re_key', 'bc-123', 'in 5 minutes');
+    const init = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(JSON.parse(init.body)).toEqual({ scheduled_at: 'in 5 minutes' });
   });
 
-  it('calls the correct campaign endpoint with sendAt', async () => {
-    const { scheduleLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-    await scheduleLoopsBroadcast('loops-api-key', 'campaign-123');
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('campaign-123');
-    const body = JSON.parse(init.body as string) as { sendAt: string };
-    expect(body.sendAt).toBeTruthy();
-    const sendAt = new Date(body.sendAt).getTime();
-    expect(sendAt).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
-    expect(sendAt).toBeLessThan(Date.now() + 16 * 60 * 1000);
-  });
-
-  it('throws on non-200 response', async () => {
-    const { scheduleLoopsBroadcast } = await import('@/lib/digest');
-    fetchMock.mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
-    await expect(scheduleLoopsBroadcast('loops-api-key', 'bad-id')).rejects.toThrow('Loops campaign schedule error: 404');
+  it('throws when Resend returns a non-2xx', async () => {
+    const { sendResendBroadcast } = await import('@/lib/digest');
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response('not found', { status: 404 })
+    );
+    await expect(sendResendBroadcast('re_key', 'missing'))
+      .rejects.toThrow('Resend broadcast send error: 404');
   });
 });
 

@@ -222,48 +222,63 @@ export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): st
 </html>`;
 }
 
-// ── Loops API client ──────────────────────────────────────────────────────────
-// Endpoints based on Loops API conventions - verify against https://loops.so/docs/api-reference
-// before first live deploy. Endpoint paths may differ from what's shown here.
+// ── Resend API client ────────────────────────────────────────────────────────
 
-export async function createLoopsBroadcast(apiKey: string, opts: {
-  name: string;
+export interface CreateResendBroadcastInput {
+  segmentId: string;
+  from: string;
   subject: string;
-  preheaderText: string;
-  htmlBody: string;
-}): Promise<string> {
-  const res = await fetch('https://app.loops.so/api/v1/campaigns', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      name: opts.name,
-      subject: opts.subject,
-      preheaderText: opts.preheaderText,
-      htmlBody: opts.htmlBody,
-      type: 'html'
-    })
-  });
-  if (!res.ok) throw new Error(`Loops campaign create error: ${res.status} ${await res.text()}`);
-  const data = await res.json() as { id?: string; campaignId?: string };
-  const id = data.id ?? data.campaignId;
-  if (!id) throw new Error('Loops campaign create: no id in response');
-  return id;
+  html: string;
+  name: string;
+  replyTo?: string;
 }
 
-export async function scheduleLoopsBroadcast(apiKey: string, campaignId: string): Promise<void> {
-  const sendAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  const res = await fetch(`https://app.loops.so/api/v1/campaigns/${campaignId}/send`, {
+export async function createResendBroadcast(
+  apiKey: string,
+  input: CreateResendBroadcastInput
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    segment_id: input.segmentId,
+    from: input.from,
+    subject: input.subject,
+    html: input.html,
+    name: input.name
+  };
+  if (input.replyTo) body.reply_to = input.replyTo;
+
+  const res = await fetch('https://api.resend.com/broadcasts', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
     },
-    body: JSON.stringify({ sendAt })
+    body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`Loops campaign schedule error: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(`Resend broadcast create error: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json() as { id?: string };
+  if (!data.id) throw new Error('Resend broadcast create: missing id in response');
+  return data.id;
+}
+
+export async function sendResendBroadcast(
+  apiKey: string,
+  broadcastId: string,
+  scheduledAt?: string
+): Promise<void> {
+  const body = scheduledAt ? { scheduled_at: scheduledAt } : {};
+  const res = await fetch(`https://api.resend.com/broadcasts/${broadcastId}/send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    throw new Error(`Resend broadcast send error: ${res.status} ${await res.text()}`);
+  }
 }
 
 // ── AgentMail QA send ─────────────────────────────────────────────────────────
