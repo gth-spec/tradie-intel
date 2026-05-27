@@ -113,15 +113,56 @@ export class MailchimpProvider implements EmailProvider {
   }
 }
 
+export class ResendProvider implements EmailProvider {
+  constructor(private apiKey: string, private segmentId: string) {}
+  async subscribe(email: string, meta: SubscribeMeta): Promise<void> {
+    if (!isValidEmail(email)) throw new Error('Invalid email');
+    const res = await fetch('https://api.resend.com/contacts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({
+        email,
+        segments: [{ id: this.segmentId }],
+        unsubscribed: !meta.consent,
+        properties: {
+          source: meta.source,
+          referrer: meta.referrer ?? '',
+          utm_source: meta.utm_source ?? '',
+          utm_medium: meta.utm_medium ?? '',
+          utm_campaign: meta.utm_campaign ?? '',
+          consent_at: meta.consent_timestamp
+        }
+      })
+    });
+    if (res.status === 422) {
+      const text = await res.text();
+      if (/already exists/i.test(text)) return;
+      throw new Error(`Resend contact create error: 422 ${text}`);
+    }
+    if (!res.ok) {
+      throw new Error(`Resend contact create error: ${res.status} ${await res.text()}`);
+    }
+  }
+}
+
 export function getProvider(): EmailProvider {
   const which = (import.meta.env.EMAIL_PROVIDER ?? process.env.EMAIL_PROVIDER) as string;
   const apiKey = (import.meta.env.EMAIL_PROVIDER_API_KEY ?? process.env.EMAIL_PROVIDER_API_KEY ?? '') as string;
   const listId = (import.meta.env.EMAIL_LIST_ID ?? process.env.EMAIL_LIST_ID ?? '') as string;
+  const resendKey = (import.meta.env.RESEND_API_KEY ?? process.env.RESEND_API_KEY ?? '') as string;
+  const resendSeg = (import.meta.env.RESEND_SEGMENT_ID ?? process.env.RESEND_SEGMENT_ID ?? '') as string;
   switch (which) {
     case 'kit':       return new KitProvider(apiKey, listId);
     case 'loops':     return new LoopsProvider(apiKey, listId);
     case 'mailchimp': return new MailchimpProvider(apiKey, listId);
     case 'memory':    return new MemoryProvider();
+    case 'resend':
+      if (!resendKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
+      if (!resendSeg) throw new Error('RESEND_SEGMENT_ID is required when EMAIL_PROVIDER=resend');
+      return new ResendProvider(resendKey, resendSeg);
     default: throw new Error(`Unknown EMAIL_PROVIDER: ${which}`);
   }
 }
