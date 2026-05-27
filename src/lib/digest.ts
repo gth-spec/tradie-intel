@@ -224,17 +224,17 @@ export function buildQaEmailHtml(opts: {
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#111;">
-  <h2 style="color:#0f766e;">TradieIntel digest draft ready for review</h2>
+  <h2 style="color:#0f766e;">TradieIntel digest ready for approval</h2>
   <p><strong>Period:</strong> ${escapeHtml(startLabel)} - ${escapeHtml(endLabel)}</p>
   <p><strong>Articles selected (${opts.articles.length}):</strong></p>
   <ol>${articleList}</ol>
   <p style="margin-top:32px;">
     <a href="${escapeHtml(opts.approveUrl)}"
        style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;">
-      Review and send in Loops
+      Approve and schedule digest
     </a>
   </p>
-  <p style="margin-top:24px;font-size:12px;color:#9ca3af;">Opens the Loops campaign editor. Review the rendered email, then click Send in Loops to publish to subscribers. Run ID: ${escapeHtml(opts.runId)}</p>
+  <p style="margin-top:24px;font-size:12px;color:#9ca3af;">This link expires in 7 days. Run ID: ${escapeHtml(opts.runId)}</p>
 </body>
 </html>`;
 }
