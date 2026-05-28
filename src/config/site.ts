@@ -9,12 +9,9 @@ export const SITE = {
   },
   email: {
     capturePlaceholder: 'your@email.com',
-    ctaButton: 'Join the early list',
-    ctaHeadline: 'Be first when the digest launches',
-    // Honest framing: capturing emails only; daily email digest is v2.
-    // Visitors get notified when the daily email goes live, plus practical
-    // AI opportunities for Australian trade operators in the meantime.
-    ctaSubhead: 'Daily trades intel - plus practical AI opportunities for Australian trade operators. We will email you when the daily digest launches.',
+    ctaButton: 'Subscribe free',
+    ctaHeadline: 'Weekly trades intel, straight to your inbox',
+    ctaSubhead: "The week's best AI-filtered trades news for Australian operators - delivered every Tuesday morning. Plus practical AI opportunities for your trade business.",
     consentText: 'I agree to receive emails from Tradie Intel and GrokoryAI. I can unsubscribe at any time.'
   }
 };

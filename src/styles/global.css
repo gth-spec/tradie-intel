@@ -7,6 +7,7 @@
   --color-brand-light: #3b82f6;
   --color-brand-dark: #1e3a8a;
   --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Bebas Neue", sans-serif;
 }
 
 @layer base {

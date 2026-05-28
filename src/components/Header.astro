@@ -2,14 +2,19 @@
 import { SITE } from '@/config/site';
 ---
 <header class="bg-white border-b border-slate-200">
-  <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-    <a href="/" class="text-xl font-bold text-brand">{SITE.name}</a>
-    <nav class="flex items-center gap-6 text-sm">
-      <a href="/" class="text-slate-700 hover:text-brand">Home</a>
-      <a href="/news" class="text-slate-700 hover:text-brand">News</a>
-      <a href={SITE.parent.url} class="text-slate-700 hover:text-brand" rel="noopener">
-        {SITE.parent.name} <span aria-hidden="true">↗</span>
-      </a>
-    </nav>
+  <div class="text-center px-4 pt-6 pb-4 border-b border-slate-100">
+    <a href="/" class="inline-block group">
+      <span class="block font-display text-6xl sm:text-7xl md:text-8xl tracking-widest text-brand uppercase leading-none group-hover:text-brand-dark transition-colors">
+        {SITE.name}
+      </span>
+      <span class="block text-[11px] uppercase tracking-widest text-slate-400 mt-2">by {SITE.parent.name}</span>
+    </a>
   </div>
+  <nav class="flex items-center justify-center gap-8 px-4 py-3 text-sm">
+    <a href="/" class="text-slate-600 hover:text-brand font-medium transition-colors">Home</a>
+    <a href="/news" class="text-slate-600 hover:text-brand font-medium transition-colors">News</a>
+    <a href={SITE.parent.url} class="text-slate-600 hover:text-brand font-medium transition-colors" rel="noopener">
+      {SITE.parent.name} <span aria-hidden="true">↗</span>
+    </a>
+  </nav>
 </header>

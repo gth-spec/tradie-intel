@@ -77,7 +77,7 @@ const { compact = false, source = 'unknown' } = Astro.props;
         });
         const json = await res.json();
         if (res.ok) {
-          msg.textContent = "You're on the list. We'll email you when the daily digest launches.";
+          msg.textContent = "You're on the list. First edition lands Tuesday morning.";
           f.reset();
         } else if (json?.error === 'consent required') {
           msg.textContent = 'Please tick the consent box to continue.';
