@@ -41,7 +41,7 @@ const { data: candidates } = await supa
 
 const related = selectRelated(item, (candidates ?? []) as FeedItem[], 3);
 const formattedDate = new Date(item.published_at).toLocaleDateString('en-AU', {
-  day: 'numeric', month: 'long', year: 'numeric'
+  day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney'
 });
 
 const ldJson = {

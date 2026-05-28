@@ -4,7 +4,7 @@ import SourceBadge from './SourceBadge.astro';
 interface Props { item: FeedItem; }
 const { item } = Astro.props;
 const formattedDate = new Date(item.published_at).toLocaleDateString('en-AU', {
-  day: 'numeric', month: 'short', year: 'numeric'
+  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Sydney'
 });
 ---
 <article class="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
