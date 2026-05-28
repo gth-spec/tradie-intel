@@ -12,7 +12,8 @@ const year = new Date().getFullYear();
       <a href="/about" class="hover:text-white">About</a>
       <a href="/privacy" class="hover:text-white">Privacy</a>
       <a href="/terms" class="hover:text-white">Terms</a>
-      <a href={SITE.parent.url} class="hover:text-white" rel="noopener">
+      <a href={SITE.parent.url} class="inline-flex items-center gap-2 hover:text-white" rel="noopener">
+        <img src="/brand/grokoryai-mark.png" alt="" width="18" height="18" class="rounded-sm" />
         Built by {SITE.parent.name} ↗
       </a>
     </nav>
