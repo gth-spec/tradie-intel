@@ -6,7 +6,7 @@ interface ImportMetaEnv {
   readonly SUPABASE_PUBLISHABLE_KEY: string;
   readonly ANTHROPIC_API_KEY: string;
   readonly CRON_SECRET: string;
-  readonly EMAIL_PROVIDER: 'kit' | 'loops' | 'mailchimp' | 'memory' | 'resend';
+  readonly EMAIL_PROVIDER: 'kit' | 'mailchimp' | 'memory' | 'resend';
   readonly EMAIL_PROVIDER_API_KEY: string;
   readonly EMAIL_LIST_ID: string;
   readonly CLAUDE_MODEL: string;

@@ -59,31 +59,6 @@ export class KitProvider implements EmailProvider {
   }
 }
 
-export class LoopsProvider implements EmailProvider {
-  constructor(private apiKey: string, private listId: string) {}
-  async subscribe(email: string, meta: SubscribeMeta): Promise<void> {
-    if (!isValidEmail(email)) throw new Error('Invalid email');
-    const res = await fetch('https://app.loops.so/api/v1/contacts/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        email,
-        mailingLists: { [this.listId]: true },
-        source: meta.source,
-        referrer: meta.referrer,
-        utmSource: meta.utm_source,
-        utmMedium: meta.utm_medium,
-        utmCampaign: meta.utm_campaign,
-        consentAt: meta.consent_timestamp
-      })
-    });
-    if (!res.ok) throw new Error(`Loops API error: ${res.status} ${await res.text()}`);
-  }
-}
-
 export class MailchimpProvider implements EmailProvider {
   constructor(private apiKey: string, private listId: string) {}
   async subscribe(email: string, meta: SubscribeMeta): Promise<void> {
@@ -156,7 +131,6 @@ export function getProvider(): EmailProvider {
   const resendSeg = (import.meta.env.RESEND_SEGMENT_ID ?? process.env.RESEND_SEGMENT_ID ?? '') as string;
   switch (which) {
     case 'kit':       return new KitProvider(apiKey, listId);
-    case 'loops':     return new LoopsProvider(apiKey, listId);
     case 'mailchimp': return new MailchimpProvider(apiKey, listId);
     case 'memory':    return new MemoryProvider();
     case 'resend':
