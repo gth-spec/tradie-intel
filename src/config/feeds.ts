@@ -20,25 +20,29 @@ export interface FeedSource {
 
 export const FEEDS: FeedSource[] = [
   // ── RSS sources (verified 2026-05-23) ────────────────────────────────────
-  { name: 'Master Plumbers AU',            url: 'https://www.masterplumbers.com.au/feed', type: 'rss', category: 'industry', enabled: true }, // 9 items
+  { name: 'Master Plumbers NSW',           url: 'https://www.masterplumbers.com.au/feed', type: 'rss', category: 'industry', enabled: true }, // 9 items - masterplumbers.com.au is the NSW state body (no separate national org)
 
   // RSS sources that failed verification 2026-05-23 - kept as records, disabled.
   { name: 'Fair Work Australia',           url: 'https://www.fairwork.gov.au/about-us/news-and-media-releases.rss', type: 'rss', category: 'regulatory', enabled: false }, // FAILED (404)
   { name: 'Master Electricians AU',        url: 'https://www.masterelectricians.com.au/feed', type: 'rss', category: 'industry', enabled: false }, // FAILED (timeout)
+  { name: 'Master Electricians AU',        url: 'https://www.masterelectricians.com.au/news', type: 'scrape', category: 'industry', enabled: true }, // RSS failed - scrape news page instead
   { name: 'Housing Industry Association',  url: 'https://hia.com.au/our-industry/newsroom/feed', type: 'rss', category: 'industry', enabled: false }, // FAILED (404)
   { name: 'Master Builders AU',            url: 'https://masterbuilders.com.au/news/feed', type: 'rss', category: 'industry', enabled: false }, // FAILED (0 items)
   { name: 'ai.gov.au',                     url: 'https://www.ai.gov.au/news.rss', type: 'rss', category: 'government', enabled: false }, // FAILED (404)
+  { name: 'National AI Centre',            url: 'https://www.ai.gov.au/news-and-insights/blog', type: 'scrape', category: 'government', enabled: true }, // no RSS - scrape /blog (parent /news-and-insights is a hub page with no articles)
   { name: 'Business.gov.au',               url: 'https://business.gov.au/news/feed', type: 'rss', category: 'government', enabled: false }, // FAILED (404)
   { name: 'BOM Severe Weather AU',         url: 'http://www.bom.gov.au/fwo/IDZ00056.warnings_national.xml', type: 'rss', category: 'weather', enabled: false }, // FAILED (404)
 
   // ── RSS sources (added post-launch) ─────────────────────────────────────
-  { name: 'Energy Magazine AU',            url: 'https://www.energymagazine.com.au/feed/', type: 'rss', category: 'industry', enabled: true }, // energy/electrical trades
+  { name: 'Energy Magazine AU',            url: 'https://www.energymagazine.com.au/feed/', type: 'rss', category: 'industry', enabled: false }, // disabled: 75% fail relevance filter (avg score 28)
 
   // ── Scrape sources (Firecrawl, verified in Task 6.7) ─────────────────────
   // Starter set covering categories the broken RSS feeds left empty.
   // Each is a news/index page that lists multiple recent articles.
-  { name: 'Plumbing Connection',           url: 'https://plumbingconnection.com.au/news/',                  type: 'scrape', category: 'news',       enabled: false }, // BLOCKED: Cloudflare WAF 403
-  { name: 'Electrical Connection',         url: 'https://electricalconnection.com.au/news/',                type: 'scrape', category: 'news',       enabled: false }, // BLOCKED: Cloudflare WAF 403
+  { name: 'Plumbing Connection',           url: 'https://plumbingconnection.com.au/category/industry-news', type: 'scrape', category: 'news',       enabled: true }, // re-verified 2026-05-27: /news/ was a stale newsletter archive, /category/industry-news is the live index
+  { name: 'Electrical Connection',         url: 'https://electricalconnection.com.au/category/industry-news', type: 'scrape', category: 'news',     enabled: true }, // re-verified 2026-05-27: same pattern as Plumbing Connection
+  { name: 'HVAC&R News',                   url: 'https://hvacrnews.com.au/',                                type: 'scrape', category: 'industry',   enabled: true }, // AIRAH-backed; verified 2026-05-27
+  { name: 'Build Australia',               url: 'https://www.buildaustralia.com.au/all-news/',              type: 'scrape', category: 'news',       enabled: true }, // verified 2026-05-27
   { name: 'Sourceable',                    url: 'https://sourceable.net/',                                  type: 'scrape', category: 'news',       enabled: true },
   { name: 'HIA News',                      url: 'https://hia.com.au/our-industry/newsroom',                 type: 'scrape', category: 'industry',   enabled: true },
   { name: 'Master Builders AU News',       url: 'https://masterbuilders.com.au/Newsroom',                   type: 'scrape', category: 'industry',   enabled: true },

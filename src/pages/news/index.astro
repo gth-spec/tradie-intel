@@ -18,6 +18,7 @@ const { data, count } = await supa
   .from('feed_items')
   .select('*', { count: 'exact' })
   .eq('niche', SITE.niche)
+  .gte('relevance_score', 40)
   .order('published_at', { ascending: false })
   .range(from, to);
 
