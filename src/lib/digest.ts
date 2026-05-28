@@ -211,6 +211,7 @@ export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): st
       </tr>
       <tr>
         <td style="padding:32px;background:#f9fafb;text-align:center;border-top:1px solid #e5e7eb;">
+          <p style="margin:0 0 10px;font-size:12px;color:#6b7280;">Also free: <a href="https://grokoryai.com/downloads/GrokoryAI-AI-Readiness-Checklist.pdf" style="color:#6b7280;text-decoration:underline;">AI Readiness Checklist for trades businesses →</a></p>
           <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">You're receiving this because you subscribed at tradieintel.com.au</p>
           <p style="margin:0;font-size:12px;color:#9ca3af;">© GrokoryAI - <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a></p>
         </td>
