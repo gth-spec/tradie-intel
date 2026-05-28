@@ -1,0 +1,30 @@
+---
+const sources = [
+  { name: 'Housing Industry Association', file: 'hia.png',                  url: 'https://hia.com.au' },
+  { name: 'Master Builders Australia',    file: 'master-builders.png',      url: 'https://masterbuilders.com.au' },
+  { name: 'Master Electricians Australia',file: 'master-electricians.png',  url: 'https://www.masterelectricians.com.au' },
+  { name: 'Master Plumbers NSW',          file: 'master-plumbers.png',      url: 'https://www.masterplumbers.com.au' },
+  { name: 'Safe Work Australia',          file: 'safe-work-australia.svg',  url: 'https://www.safeworkaustralia.gov.au' }
+];
+---
+<section class="bg-slate-50 border-y border-slate-200">
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <p class="text-xs uppercase tracking-wider text-slate-500 text-center mb-5">
+      Sourced from Australia's leading trade and regulatory bodies
+    </p>
+    <ul class="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+      {sources.map(s => (
+        <li>
+          <a href={s.url} rel="noopener" target="_blank" title={s.name} class="block">
+            <img
+              src={`/brand/sources/${s.file}`}
+              alt={s.name}
+              class="h-9 sm:h-10 w-auto object-contain opacity-70 grayscale hover:opacity-100 hover:grayscale-0 transition"
+              loading="lazy"
+            />
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

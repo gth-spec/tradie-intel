@@ -1,6 +1,7 @@
 ---
 import Base from '@/layouts/Base.astro';
 import Hero from '@/components/Hero.astro';
+import SourceStrip from '@/components/SourceStrip.astro';
 import FeedCard from '@/components/FeedCard.astro';
 import EmailCapture from '@/components/EmailCapture.astro';
 import { publicClient } from '@/lib/supabase';
@@ -22,6 +23,7 @@ const items = (data ?? []) as FeedItem[];
 ---
 <Base>
   <Hero />
+  <SourceStrip />
   <section class="max-w-5xl mx-auto px-4 py-12">
     {error && (
       <div class="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded mb-6">

@@ -123,6 +123,19 @@ export class ResendProvider implements EmailProvider {
   }
 }
 
+// Writes to two providers concurrently. The primary provider is authoritative —
+// its failure surfaces as an error. The secondary is fire-and-forget; its failure
+// is logged but does not fail the subscribe call.
+export class DualProvider implements EmailProvider {
+  constructor(private primary: EmailProvider, private secondary: EmailProvider) {}
+  async subscribe(email: string, meta: SubscribeMeta): Promise<void> {
+    await this.primary.subscribe(email, meta);
+    this.secondary.subscribe(email, meta).catch(err =>
+      console.error('[DualProvider] secondary write failed:', err)
+    );
+  }
+}
+
 export function getProvider(): EmailProvider {
   const which = (import.meta.env.EMAIL_PROVIDER ?? process.env.EMAIL_PROVIDER) as string;
   const apiKey = (import.meta.env.EMAIL_PROVIDER_API_KEY ?? process.env.EMAIL_PROVIDER_API_KEY ?? '') as string;
@@ -137,6 +150,16 @@ export function getProvider(): EmailProvider {
       if (!resendKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
       if (!resendSeg) throw new Error('RESEND_SEGMENT_ID is required when EMAIL_PROVIDER=resend');
       return new ResendProvider(resendKey, resendSeg);
+    case 'dual': {
+      if (!resendKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=dual');
+      if (!resendSeg) throw new Error('RESEND_SEGMENT_ID is required when EMAIL_PROVIDER=dual');
+      if (!apiKey)    throw new Error('EMAIL_PROVIDER_API_KEY (Kit API key) is required when EMAIL_PROVIDER=dual');
+      if (!listId)    throw new Error('EMAIL_LIST_ID (Kit form ID) is required when EMAIL_PROVIDER=dual');
+      return new DualProvider(
+        new ResendProvider(resendKey, resendSeg),
+        new KitProvider(apiKey, listId)
+      );
+    }
     default: throw new Error(`Unknown EMAIL_PROVIDER: ${which}`);
   }
 }
