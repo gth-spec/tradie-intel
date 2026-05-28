@@ -57,7 +57,14 @@ const ldJson = {
     logo: { '@type': 'ImageObject', url: `${SITE.url}/favicon.svg` }
   },
   isBasedOn: item.original_url,
-  keywords: item.tags.join(', ')
+  keywords: item.tags.join(', '),
+  ...(item.question_headline && item.why_it_matters ? {
+    mainEntity: {
+      '@type': 'Question',
+      name: item.question_headline,
+      acceptedAnswer: { '@type': 'Answer', text: item.why_it_matters }
+    }
+  } : {})
 };
 ---
 <Base title={item.title} description={item.ai_summary ?? item.title}>
@@ -76,10 +83,6 @@ const ldJson = {
     </div>
 
     <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-6">{item.title}</h1>
-
-    {item.question_headline && (
-      <h2 class="text-xl text-slate-600 font-normal mb-6 italic">{item.question_headline}</h2>
-    )}
 
     {item.ai_summary && (
       <div class="prose prose-slate max-w-none mb-6">
@@ -101,9 +104,14 @@ const ldJson = {
     )}
 
     {item.why_it_matters && (
-      <div class="bg-blue-50 border-l-4 border-brand p-4 my-6 rounded-r">
-        <p class="text-sm font-semibold text-brand-dark uppercase tracking-wide mb-1">Why it matters</p>
-        <p class="text-slate-800">{item.why_it_matters}</p>
+      <div class="bg-blue-50 border-l-4 border-brand p-4 my-6 rounded-r"
+           itemscope itemtype="https://schema.org/Question">
+        <p class="text-sm font-semibold text-brand-dark mb-2" itemprop="name">
+          {item.question_headline ?? 'Why does this matter for tradies?'}
+        </p>
+        <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+          <p class="text-slate-800" itemprop="text">{item.why_it_matters}</p>
+        </div>
       </div>
     )}
 
