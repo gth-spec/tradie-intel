@@ -28,8 +28,8 @@ let _publicClient: SupabaseClient | null = null;
 export function adminClient(): SupabaseClient {
   if (!_adminClient) {
     _adminClient = createClient(
-      import.meta.env.SUPABASE_URL,
-      import.meta.env.SUPABASE_SECRET_KEY
+      (import.meta as any).env?.SUPABASE_URL ?? process.env.SUPABASE_URL,
+      (import.meta as any).env?.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SECRET_KEY
     );
   }
   return _adminClient;
@@ -39,8 +39,8 @@ export function adminClient(): SupabaseClient {
 export function publicClient(): SupabaseClient {
   if (!_publicClient) {
     _publicClient = createClient(
-      import.meta.env.SUPABASE_URL,
-      import.meta.env.SUPABASE_PUBLISHABLE_KEY
+      (import.meta as any).env?.SUPABASE_URL ?? process.env.SUPABASE_URL,
+      (import.meta as any).env?.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY
     );
   }
   return _publicClient;

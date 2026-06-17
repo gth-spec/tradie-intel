@@ -15,3 +15,5 @@ supabase/.temp
 .vercel
 .env*
 .worktrees/
+
+.trigger
