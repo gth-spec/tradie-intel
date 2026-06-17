@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { Anthropic as PosthogAnthropic } from '@posthog/ai/anthropic';
 import { z } from 'zod';
 import { ALLOWED_TAGS, TAG_ALIASES, STATES } from '@/config/tags';
+import { getPosthog, flushPosthog } from './posthog';
 
 const STATE_SET = new Set<string>(STATES);
 
@@ -106,15 +108,43 @@ export function parseEnrichmentResponse(text: string): Enrichment {
 }
 
 export async function enrich(input: EnrichmentInput): Promise<Enrichment> {
-  const apiKey = import.meta.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  // import.meta.env is Astro-injected and undefined under a plain Node runtime
+  // (e.g. Trigger.dev). Optional-chain so the process.env fallback actually fires.
+  const apiKey = (import.meta as any).env?.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
-  const model = (import.meta.env.CLAUDE_MODEL ?? process.env.CLAUDE_MODEL) || 'claude-sonnet-4-5-20250929';
-  const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
+  const model = ((import.meta as any).env?.CLAUDE_MODEL ?? process.env.CLAUDE_MODEL) || 'claude-sonnet-4-5-20250929';
+
+  const createParams = {
     model,
     max_tokens: 1024,
-    messages: [{ role: 'user', content: enrichmentPrompt(input) }]
-  });
+    messages: [{ role: 'user' as const, content: enrichmentPrompt(input) }]
+  };
+
+  // When PostHog is configured, route the call through the @posthog/ai wrapper so
+  // it emits an $ai_generation event (model, tokens, cost, latency). Otherwise fall
+  // back to the plain SDK - PostHog must never be a hard dependency of the pipeline.
+  const phClient = getPosthog();
+  let response: Anthropic.Message;
+  if (phClient) {
+    const client = new PosthogAnthropic({ apiKey, posthog: phClient });
+    try {
+      // Non-streaming params, so the runtime value is always a Message; the
+      // wrapper's type widens to Message | Stream, hence the narrowing cast.
+      response = (await client.messages.create({
+        ...createParams,
+        posthogDistinctId: 'tradie-intel-pipeline',
+        posthogProperties: { project: 'tradie-intel', component: 'enrich', model }
+      })) as Anthropic.Message;
+    } finally {
+      // One item per Trigger.dev run, so flush after each call to avoid losing
+      // the event when the short-lived runtime exits.
+      await flushPosthog();
+    }
+  } else {
+    const client = new Anthropic({ apiKey });
+    response = await client.messages.create(createParams);
+  }
+
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map(b => b.text).join('').trim();
