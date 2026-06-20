@@ -390,7 +390,7 @@ export function buildQaEmailHtml(opts: {
       Approve and send
     </a>
   </p>
-  <p style="margin-top:24px;font-size:12px;color:#9ca3af;">Clicking the button verifies a signed token and immediately sends the Resend broadcast to all subscribers in the General segment. Run ID: ${escapeHtml(opts.runId)}</p>
+  <p style="margin-top:24px;font-size:12px;color:#9ca3af;">Clicking the button verifies a signed token and immediately sends the NitroSend campaign to the TradieIntel Weekly Digest list. Run ID: ${escapeHtml(opts.runId)}</p>
 </body>
 </html>`;
 }

@@ -7,12 +7,12 @@ import {
   getLastDigestArticleIds,
   selectArticles,
   getDateRange,
-  buildEmailHtml,
+  buildDigestSections,
   buildQaEmailHtml,
-  createResendBroadcast,
   sendQaEmail,
   signApproveToken
 } from '@/lib/digest';
+import { createNitrosendCampaign } from '@/lib/nitrosend';
 
 export const prerender = false;
 
@@ -25,8 +25,8 @@ export const GET: APIRoute = async ({ request, url }) => {
   const supa = adminClient();
 
   const resendKey = (import.meta.env.RESEND_API_KEY ?? process.env.RESEND_API_KEY ?? '') as string;
-  const segmentId = (import.meta.env.RESEND_SEGMENT_ID ?? process.env.RESEND_SEGMENT_ID ?? '') as string;
-  const fromAddr = (import.meta.env.RESEND_FROM ?? process.env.RESEND_FROM ?? '') as string;
+  const nitroKey = (import.meta.env.NITROSEND_API_KEY ?? process.env.NITROSEND_API_KEY ?? '') as string;
+  const nitroList = (import.meta.env.NITROSEND_LIST_ID ?? process.env.NITROSEND_LIST_ID ?? '') as string;
   const siteUrl = (import.meta.env.PUBLIC_SITE_URL ?? process.env.PUBLIC_SITE_URL ?? 'https://tradieintel.com.au') as string;
   const agentmailKey = (import.meta.env.AGENTMAIL_API_KEY ?? process.env.AGENTMAIL_API_KEY ?? '') as string;
 
@@ -81,7 +81,6 @@ export const GET: APIRoute = async ({ request, url }) => {
     });
   }
 
-  const html = buildEmailHtml(articles, dateRange);
   const startLabel = dateRange.start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
   const endLabel = dateRange.end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
   const subject = `This week in trades: ${startLabel} - ${endLabel}`;
@@ -91,22 +90,21 @@ export const GET: APIRoute = async ({ request, url }) => {
   summary.articles = articles.map(a => ({ id: a.id, title: a.title, score: a.relevance_score }));
 
   if (dryRun) {
-    summary.dry_run_html_length = html.length;
     return new Response(JSON.stringify(summary), {
       status: 200, headers: { 'Content-Type': 'application/json' }
     });
   }
 
-  if (!resendKey || !segmentId || !fromAddr) {
-    return new Response('Server misconfigured: RESEND_API_KEY, RESEND_SEGMENT_ID, and RESEND_FROM must be set', { status: 500 });
+  if (!nitroKey || !nitroList) {
+    return new Response('Server misconfigured: NITROSEND_API_KEY and NITROSEND_LIST_ID must be set', { status: 500 });
   }
 
-  const broadcastId = await createResendBroadcast(resendKey, {
-    segmentId,
-    from: fromAddr,
+  const sections = buildDigestSections(articles, dateRange);
+  const broadcastId = await createNitrosendCampaign(nitroKey, {
+    listId: nitroList,
     subject,
-    html,
-    name: campaignName
+    name: campaignName,
+    sections
   });
 
   summary.broadcast_id = broadcastId;
@@ -122,7 +120,7 @@ export const GET: APIRoute = async ({ request, url }) => {
         article_count: articles.length,
         lookback_days: lookbackDays,
         campaign_name: campaignName,
-        resend_segment_id: segmentId
+        nitrosend_list_id: nitroList
       }
     })
     .select('id')
