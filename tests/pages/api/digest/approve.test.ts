@@ -8,14 +8,10 @@ vi.mock('@/lib/supabase', () => ({
   adminClient: vi.fn()
 }));
 
-// Mock digest functions - keep real signApproveToken/verifyApproveToken, mock sendResendBroadcast
-vi.mock('@/lib/digest', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/digest')>();
-  return {
-    ...actual,
-    sendResendBroadcast: vi.fn().mockResolvedValue(undefined)
-  };
-});
+// Mock nitrosend - mock sendNitrosendCampaign
+vi.mock('@/lib/nitrosend', () => ({
+  sendNitrosendCampaign: vi.fn().mockResolvedValue(undefined)
+}));
 
 function makeRequest(token: string): Request {
   return new Request(`https://tradieintel.com.au/api/digest/approve?token=${encodeURIComponent(token)}`, {
@@ -45,7 +41,7 @@ function makeSupaWithRun(status: string) {
 describe('GET /api/digest/approve', () => {
   beforeEach(() => {
     vi.stubEnv('CRON_SECRET', SECRET);
-    vi.stubEnv('RESEND_API_KEY', 're_test_key');
+    vi.stubEnv('NITROSEND_API_KEY', 'nitro_test_key');
   });
 
   afterEach(() => {
@@ -53,12 +49,12 @@ describe('GET /api/digest/approve', () => {
     vi.resetModules();
   });
 
-  it('verifies the HMAC token, calls Resend send, and updates digest_runs to sent', async () => {
+  it('verifies the HMAC token, calls NitroSend send, and updates digest_runs to sent', async () => {
     const { adminClient } = await import('@/lib/supabase');
     (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('draft'));
 
     const { GET } = await import('@/pages/api/digest/approve');
-    const { sendResendBroadcast } = await import('@/lib/digest');
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
     const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
 
@@ -66,7 +62,7 @@ describe('GET /api/digest/approve', () => {
     const text = await res.text();
     expect(text).toContain('Digest sent');
     expect(res.headers.get('Content-Type')).toContain('text/html');
-    expect(sendResendBroadcast).toHaveBeenCalledWith('re_test_key', 'campaign-123');
+    expect(sendNitrosendCampaign).toHaveBeenCalledWith('nitro_test_key', 'campaign-123');
   });
 
   it('returns 400 on missing or malformed token', async () => {
@@ -89,42 +85,42 @@ describe('GET /api/digest/approve', () => {
     const { adminClient } = await import('@/lib/supabase');
     (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('sent'));
     const { GET } = await import('@/pages/api/digest/approve');
-    const { sendResendBroadcast } = await import('@/lib/digest');
-    vi.mocked(sendResendBroadcast).mockClear();
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    vi.mocked(sendNitrosendCampaign).mockClear();
     const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
     const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
     expect(res.status).toBe(409);
     const text = await res.text();
     expect(text).toContain('Not draftable');
-    expect(sendResendBroadcast).not.toHaveBeenCalled();
+    expect(sendNitrosendCampaign).not.toHaveBeenCalled();
   });
 
   it('returns 409 when run has status skipped', async () => {
     const { adminClient } = await import('@/lib/supabase');
     (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(makeSupaWithRun('skipped'));
     const { GET } = await import('@/pages/api/digest/approve');
-    const { sendResendBroadcast } = await import('@/lib/digest');
-    vi.mocked(sendResendBroadcast).mockClear();
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    vi.mocked(sendNitrosendCampaign).mockClear();
     const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
     const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
     expect(res.status).toBe(409);
     const text = await res.text();
     expect(text).toContain('Not draftable');
-    expect(sendResendBroadcast).not.toHaveBeenCalled();
+    expect(sendNitrosendCampaign).not.toHaveBeenCalled();
   });
 
-  it('returns 502 when sendResendBroadcast throws', async () => {
+  it('returns 502 when sendNitrosendCampaign throws', async () => {
     const { adminClient } = await import('@/lib/supabase');
     const supaStub = makeSupaWithRun('draft');
     (adminClient as ReturnType<typeof vi.fn>).mockReturnValue(supaStub);
     const { GET } = await import('@/pages/api/digest/approve');
-    const { sendResendBroadcast } = await import('@/lib/digest');
-    vi.mocked(sendResendBroadcast).mockRejectedValueOnce(new Error('Resend broadcast send error: 500 Internal Server Error'));
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    vi.mocked(sendNitrosendCampaign).mockRejectedValueOnce(new Error('NitroSend campaign send error: 500 Internal Server Error'));
     const token = signApproveToken('run-id-1', 'campaign-123', SECRET);
     const res = await GET({ request: makeRequest(token), url: makeUrl(token) } as Parameters<typeof GET>[0]);
     expect(res.status).toBe(502);
     const text = await res.text();
-    expect(text).toContain('Resend send failed');
+    expect(text).toContain('NitroSend send failed');
     // DB update must NOT have been called
     expect(supaStub.from().update).not.toHaveBeenCalled();
   });
