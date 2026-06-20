@@ -219,6 +219,145 @@ describe('createNitrosendCampaign', () => {
   });
 });
 
+// ── reconcileNitrosendList ────────────────────────────────────────────────────
+
+describe('reconcileNitrosendList', () => {
+  const NITRO_KEY = 'ns_test_key';
+  const LIST_ID = '42';
+  const KIT_KEY = 'kit_test_key';
+  const FORM_ID = '999';
+  const NITRO_BASE = 'https://api.nitrosend.com/v1/my';
+  const KIT_BASE = 'https://api.kit.com/v4';
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('GETs Kit subscribers, POSTs bulk add, returns count', async () => {
+    // First call: Kit single-page response
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          subscribers: [
+            { email_address: 'a@b.com' },
+            { email_address: 'c@d.com' }
+          ],
+          pagination: { has_next_page: false, end_cursor: null }
+        }),
+        { status: 200 }
+      )
+    );
+    // Second call: NitroSend bulk add
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+
+    const { reconcileNitrosendList } = await import('@/lib/nitrosend');
+    const count = await reconcileNitrosendList(NITRO_KEY, LIST_ID, KIT_KEY, FORM_ID);
+
+    expect(count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Check Kit GET request
+    const [kitUrl, kitInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(kitUrl).toContain(`${KIT_BASE}/forms/${FORM_ID}/subscribers`);
+    expect(kitUrl).toContain('per_page=500');
+    expect((kitInit.headers as Record<string, string>)['X-Kit-Api-Key']).toBe(KIT_KEY);
+
+    // Check NitroSend bulk POST
+    const [nitroUrl, nitroInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(nitroUrl).toBe(`${NITRO_BASE}/lists/${LIST_ID}/contacts/bulk`);
+    expect(nitroInit.method).toBe('POST');
+    expect((nitroInit.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${NITRO_KEY}`);
+    const body = JSON.parse(nitroInit.body as string);
+    expect(body).toEqual({ action: 'add', emails: ['a@b.com', 'c@d.com'] });
+  });
+
+  it('paginates Kit when has_next_page is true, passes both emails to bulk add', async () => {
+    // First Kit page: has_next_page true, end_cursor 'X'
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          subscribers: [{ email_address: 'first@example.com' }],
+          pagination: { has_next_page: true, end_cursor: 'X' }
+        }),
+        { status: 200 }
+      )
+    );
+    // Second Kit page: no more pages
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          subscribers: [{ email_address: 'second@example.com' }],
+          pagination: { has_next_page: false, end_cursor: null }
+        }),
+        { status: 200 }
+      )
+    );
+    // NitroSend bulk add
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+
+    const { reconcileNitrosendList } = await import('@/lib/nitrosend');
+    const count = await reconcileNitrosendList(NITRO_KEY, LIST_ID, KIT_KEY, FORM_ID);
+
+    expect(count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    // Second Kit GET should include after=X
+    const [secondKitUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(secondKitUrl).toContain('after=X');
+
+    // Bulk add should include both emails
+    const [, nitroInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    const body = JSON.parse(nitroInit.body as string);
+    expect(body).toEqual({
+      action: 'add',
+      emails: ['first@example.com', 'second@example.com']
+    });
+  });
+
+  it('throws a descriptive error on Kit non-2xx response', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('Unauthorized', { status: 401 })
+    );
+
+    const { reconcileNitrosendList } = await import('@/lib/nitrosend');
+    await expect(
+      reconcileNitrosendList(NITRO_KEY, LIST_ID, KIT_KEY, FORM_ID)
+    ).rejects.toThrow('Kit list subscribers error: 401');
+  });
+
+  it('throws a descriptive error on NitroSend bulk add non-2xx response', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          subscribers: [{ email_address: 'a@b.com' }],
+          pagination: { has_next_page: false, end_cursor: null }
+        }),
+        { status: 200 }
+      )
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response('Bad request', { status: 400 })
+    );
+
+    const { reconcileNitrosendList } = await import('@/lib/nitrosend');
+    await expect(
+      reconcileNitrosendList(NITRO_KEY, LIST_ID, KIT_KEY, FORM_ID)
+    ).rejects.toThrow('Nitrosend bulk add error:');
+  });
+});
+
 // ── sendNitrosendCampaign ─────────────────────────────────────────────────────
 
 describe('sendNitrosendCampaign', () => {

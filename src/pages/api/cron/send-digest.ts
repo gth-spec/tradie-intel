@@ -12,7 +12,7 @@ import {
   sendQaEmail,
   signApproveToken
 } from '@/lib/digest';
-import { createNitrosendCampaign } from '@/lib/nitrosend';
+import { createNitrosendCampaign, reconcileNitrosendList } from '@/lib/nitrosend';
 
 export const prerender = false;
 
@@ -97,6 +97,15 @@ export const GET: APIRoute = async ({ request, url }) => {
 
   if (!nitroKey || !nitroList) {
     return new Response('Server misconfigured: NITROSEND_API_KEY and NITROSEND_LIST_ID must be set', { status: 500 });
+  }
+
+  const kitKey = (import.meta.env.EMAIL_PROVIDER_API_KEY ?? process.env.EMAIL_PROVIDER_API_KEY ?? '') as string;
+  const kitForm = (import.meta.env.EMAIL_LIST_ID ?? process.env.EMAIL_LIST_ID ?? '') as string;
+  try {
+    summary.reconciled = await reconcileNitrosendList(nitroKey, nitroList, kitKey, kitForm);
+  } catch (e) {
+    console.error('NitroSend list reconcile failed (continuing):', e);
+    summary.reconcile_error = e instanceof Error ? e.message : String(e);
   }
 
   const sections = buildDigestSections(articles, dateRange);

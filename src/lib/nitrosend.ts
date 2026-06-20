@@ -103,6 +103,74 @@ export async function createNitrosendCampaign(
   return String(campaignId);
 }
 
+const KIT_BASE_URL = 'https://api.kit.com/v4';
+const BULK_CHUNK_SIZE = 200;
+
+/**
+ * Reconciles the NitroSend send-list from Kit (system of record).
+ * Pages through all Kit form subscribers and bulk-adds them to the NitroSend list.
+ * Returns the total number of emails reconciled.
+ *
+ * Call this before sending a digest so a missed dual-write can't silently
+ * drop a recipient. Reconcile failure should be caught by the caller and
+ * logged without blocking the send.
+ */
+export async function reconcileNitrosendList(
+  nitroKey: string,
+  listId: string,
+  kitKey: string,
+  kitFormId: string
+): Promise<number> {
+  // Collect all subscriber emails from Kit, following pagination
+  const emails: string[] = [];
+  let after: string | null = null;
+
+  while (true) {
+    const url = new URL(`${KIT_BASE_URL}/forms/${kitFormId}/subscribers`);
+    url.searchParams.set('per_page', '500');
+    if (after !== null) {
+      url.searchParams.set('after', after);
+    }
+
+    const kitRes = await fetch(url.toString(), {
+      method: 'GET',
+      headers: { 'X-Kit-Api-Key': kitKey }
+    });
+    if (!kitRes.ok) {
+      const text = await kitRes.text();
+      throw new Error(`Kit list subscribers error: ${kitRes.status} ${text}`);
+    }
+
+    const data = await kitRes.json() as {
+      subscribers: Array<{ email_address: string }>;
+      pagination: { has_next_page: boolean; end_cursor: string | null };
+    };
+
+    for (const sub of data.subscribers) {
+      emails.push(sub.email_address);
+    }
+
+    if (!data.pagination.has_next_page) break;
+    after = data.pagination.end_cursor;
+  }
+
+  // Bulk-add all collected emails to NitroSend in chunks of 200
+  for (let i = 0; i < emails.length; i += BULK_CHUNK_SIZE) {
+    const chunk = emails.slice(i, i + BULK_CHUNK_SIZE);
+    const nitroRes = await fetch(`${BASE_URL}/lists/${listId}/contacts/bulk`, {
+      method: 'POST',
+      headers: headers(nitroKey),
+      body: JSON.stringify({ action: 'add', emails: chunk })
+    });
+    if (!nitroRes.ok) {
+      const text = await nitroRes.text();
+      throw new Error(`Nitrosend bulk add error: ${nitroRes.status} ${text}`);
+    }
+  }
+
+  return emails.length;
+}
+
 /**
  * Sends a NitroSend campaign immediately.
  * POST /campaigns/{campaignId}/send
