@@ -415,10 +415,12 @@ export async function sendQaEmail(apiKey: string, opts: {
 }
 
 // ── Stale draft cleanup ───────────────────────────────────────────────────────
+// NitroSend has no campaign DELETE endpoint (campaigns are GET/POST/PATCH/send
+// only per docs/nitrosend-api-probe.md), so cleanup is DB-only: stale draft
+// rows are marked expired without any external API call.
 
 export async function cleanupStaleDrafts(
-  supabase: SupabaseClient,
-  resendKey?: string
+  supabase: SupabaseClient
 ): Promise<void> {
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
@@ -430,13 +432,6 @@ export async function cleanupStaleDrafts(
   if (!data || data.length === 0) return;
 
   for (const run of data as { id: string; broadcast_id: string | null }[]) {
-    if (resendKey && run.broadcast_id) {
-      try {
-        await deleteResendBroadcast(resendKey, run.broadcast_id);
-      } catch (e) {
-        console.warn(`Failed to delete Resend draft ${run.broadcast_id} for run ${run.id}:`, e);
-      }
-    }
     await supabase
       .from('digest_runs')
       .update({ status: 'expired' })

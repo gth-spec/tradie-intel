@@ -470,10 +470,9 @@ describe('cleanupStaleDrafts', () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it('deletes the matching Resend draft for each stale row when resendKey is given', async () => {
+  it('expires multiple stale draft rows without any HTTP call (NitroSend has no campaign DELETE)', async () => {
     vi.resetModules();
-    const fetchSpy = vi.spyOn(global, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
+    const fetchSpy = vi.spyOn(global, 'fetch');
     const { cleanupStaleDrafts } = await import('@/lib/digest');
     const updateEq = vi.fn().mockResolvedValue({ error: null });
     const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
@@ -492,65 +491,30 @@ describe('cleanupStaleDrafts', () => {
         update: updateMock
       })
     } as unknown as SupabaseClient;
-    await cleanupStaleDrafts(supa, 're_key');
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(fetchSpy).toHaveBeenNthCalledWith(1, 'https://api.resend.com/broadcasts/bc-1', expect.objectContaining({ method: 'DELETE' }));
-    expect(fetchSpy).toHaveBeenNthCalledWith(2, 'https://api.resend.com/broadcasts/bc-2', expect.objectContaining({ method: 'DELETE' }));
+    await cleanupStaleDrafts(supa);
+    // DB-only: no external HTTP calls made
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // All three rows are expired regardless of broadcast_id presence
     expect(updateMock).toHaveBeenCalledTimes(3);
+    expect(updateMock).toHaveBeenCalledWith({ status: 'expired' });
     fetchSpy.mockRestore();
   });
 
-  it('continues expiring rows when a Resend delete fails', async () => {
+  it('leaves non-draft and fresh draft rows untouched', async () => {
     vi.resetModules();
-    const fetchSpy = vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(new Response('server error', { status: 500 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { cleanupStaleDrafts } = await import('@/lib/digest');
-    const updateEq = vi.fn().mockResolvedValue({ error: null });
-    const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
+    const updateMock = vi.fn();
+    // Supabase mock: .lt() returns empty (no stale drafts qualify the select)
     const supa = {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        lt: vi.fn().mockResolvedValue({
-          data: [
-            { id: 'r-1', broadcast_id: 'bc-1' },
-            { id: 'r-2', broadcast_id: 'bc-2' }
-          ],
-          error: null
-        }),
-        update: updateMock
-      })
-    } as unknown as SupabaseClient;
-    await cleanupStaleDrafts(supa, 're_key');
-    expect(warn).toHaveBeenCalledOnce();
-    expect(updateMock).toHaveBeenCalledTimes(2);
-    fetchSpy.mockRestore();
-    warn.mockRestore();
-  });
-
-  it('skips Resend deletes when no resendKey is given', async () => {
-    vi.resetModules();
-    const fetchSpy = vi.spyOn(global, 'fetch');
-    const { cleanupStaleDrafts } = await import('@/lib/digest');
-    const updateEq = vi.fn().mockResolvedValue({ error: null });
-    const updateMock = vi.fn().mockReturnValue({ eq: updateEq });
-    const supa = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        lt: vi.fn().mockResolvedValue({
-          data: [{ id: 'r-1', broadcast_id: 'bc-1' }],
-          error: null
-        }),
+        lt: vi.fn().mockResolvedValue({ data: [], error: null }),
         update: updateMock
       })
     } as unknown as SupabaseClient;
     await cleanupStaleDrafts(supa);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(updateMock).toHaveBeenCalledOnce();
-    fetchSpy.mockRestore();
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
 

@@ -24,7 +24,6 @@ export const GET: APIRoute = async ({ request, url }) => {
   const dryRun = url.searchParams.get('dryRun') === '1';
   const supa = adminClient();
 
-  const resendKey = (import.meta.env.RESEND_API_KEY ?? process.env.RESEND_API_KEY ?? '') as string;
   const nitroKey = (import.meta.env.NITROSEND_API_KEY ?? process.env.NITROSEND_API_KEY ?? '') as string;
   const nitroList = (import.meta.env.NITROSEND_LIST_ID ?? process.env.NITROSEND_LIST_ID ?? '') as string;
   const siteUrl = (import.meta.env.PUBLIC_SITE_URL ?? process.env.PUBLIC_SITE_URL ?? 'https://tradieintel.com.au') as string;
@@ -35,7 +34,7 @@ export const GET: APIRoute = async ({ request, url }) => {
     dry_run: dryRun
   };
 
-  await cleanupStaleDrafts(supa, resendKey || undefined);
+  await cleanupStaleDrafts(supa);
 
   if (await hasRecentDigestRun(supa)) {
     summary.skipped = true;
