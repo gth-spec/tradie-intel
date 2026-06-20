@@ -148,7 +148,7 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function formatShortDate(d: Date): string {
+export function formatShortDate(d: Date): string {
   return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
 }
 
@@ -221,6 +221,64 @@ export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): st
 </table>
 </body>
 </html>`;
+}
+
+// ── NitroSend section-based digest builder ────────────────────────────────────
+// Returns an array of NitroSend section objects compatible with
+// `design.sections[]` in the PATCH /templates call.
+// Shape per docs/nitrosend-api-probe.md:
+//   { type:'header', props:{…} }
+//   { type:'text',   props:{ content:'<html>' } }
+//   { type:'footer' }
+
+export function buildDigestSections(articles: DigestItem[], dateRange: DateRange): unknown[] {
+  const startLabel = formatShortDate(dateRange.start);
+  const endLabel = formatShortDate(dateRange.end);
+  const rangeLabel = `${startLabel} - ${endLabel}`;
+
+  const sections: unknown[] = [];
+
+  // Header
+  sections.push({
+    type: 'header',
+    props: {
+      variant: 'wordmark',
+      wordmark_text: 'TradieIntel',
+      wordmark_color: '#ffffff',
+      background_color: '#0f766e'
+    }
+  });
+
+  // Intro text
+  sections.push({
+    type: 'text',
+    props: {
+      content: `<p style="color:#374151;">Here's what's worth knowing in the trades sector this week (${escapeHtml(rangeLabel)}).</p>`
+    }
+  });
+
+  // One text section per article
+  for (const a of articles) {
+    sections.push({
+      type: 'text',
+      props: {
+        content: [
+          `<h2 style="margin:0 0 8px;font-size:18px;font-weight:600;line-height:1.3;">`,
+          `<a href="${escapeHtml(a.original_url)}" style="color:#0f766e;text-decoration:none;">${escapeHtml(a.title)}</a>`,
+          `</h2>`,
+          `<p style="margin:0 0 8px;font-size:15px;color:#374151;line-height:1.6;">${escapeHtml(a.ai_summary)}</p>`,
+          `<p style="margin:0 0 12px;font-size:13px;color:#6b7280;font-style:italic;">${escapeHtml(a.why_it_matters)}</p>`,
+          `<span style="font-size:12px;color:#9ca3af;">${escapeHtml(a.source)}</span>`,
+          `<a href="${escapeHtml(a.original_url)}" style="margin-left:12px;font-size:13px;color:#0f766e;">Read more →</a>`
+        ].join('')
+      }
+    });
+  }
+
+  // Footer (auto-fills company name + address + unsubscribe from brand kit)
+  sections.push({ type: 'footer' });
+
+  return sections;
 }
 
 // ── Resend API client ────────────────────────────────────────────────────────

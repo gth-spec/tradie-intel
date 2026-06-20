@@ -553,3 +553,136 @@ describe('cleanupStaleDrafts', () => {
     fetchSpy.mockRestore();
   });
 });
+
+// ── buildDigestSections ───────────────────────────────────────────────────────
+
+describe('buildDigestSections', () => {
+  const fakeArticles: DigestItem[] = [
+    {
+      id: 'a1',
+      title: 'Gas safety update for plumbers',
+      ai_summary: 'New gas regs effective July.',
+      why_it_matters: 'Affects all licensed gas fitters.',
+      original_url: 'https://example.com/gas-safety',
+      source: 'WorkSafe AU',
+      published_at: '2026-06-14T00:00:00Z',
+      relevance_score: 95
+    },
+    {
+      id: 'a2',
+      title: 'Electricians & the new code',
+      ai_summary: 'Wiring standard revised.',
+      why_it_matters: 'Mandatory from 1 July.',
+      original_url: 'https://example.com/wiring',
+      source: 'Standards AU',
+      published_at: '2026-06-15T00:00:00Z',
+      relevance_score: 88
+    },
+    {
+      id: 'a3',
+      title: 'Builder licensing changes <2026>',
+      ai_summary: 'Summary with <html> & special chars.',
+      why_it_matters: 'Important & "urgent".',
+      original_url: 'https://example.com/builders?a=1&b=2',
+      source: 'VBA',
+      published_at: '2026-06-16T00:00:00Z',
+      relevance_score: 80
+    }
+  ];
+
+  const dateRange = {
+    start: new Date('2026-06-14'),
+    end: new Date('2026-06-21')
+  };
+
+  it('starts with a header section with wordmark_text TradieIntel and teal background', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    expect(sections.length).toBeGreaterThan(0);
+    const first = sections[0] as { type: string; props: Record<string, string> };
+    expect(first.type).toBe('header');
+    expect(first.props.variant).toBe('wordmark');
+    expect(first.props.wordmark_text).toBe('TradieIntel');
+    expect(first.props.wordmark_color).toBe('#ffffff');
+    expect(first.props.background_color).toBe('#0f766e');
+  });
+
+  it('ends with a footer section', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    const last = sections[sections.length - 1] as { type: string };
+    expect(last.type).toBe('footer');
+  });
+
+  it('returns header + intro text + 3 article sections + footer = 6 sections for 3 articles', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    // 1 header + 1 intro text + 3 article text sections + 1 footer = 6
+    expect(sections).toHaveLength(6);
+  });
+
+  it('includes each article title in the serialized sections', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    const serialized = JSON.stringify(sections);
+    expect(serialized).toContain('Gas safety update for plumbers');
+    expect(serialized).toContain('Electricians &amp; the new code');
+    expect(serialized).toContain('Builder licensing changes &lt;2026&gt;');
+  });
+
+  it('includes each article original_url in the serialized sections', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    const serialized = JSON.stringify(sections);
+    expect(serialized).toContain('https://example.com/gas-safety');
+    expect(serialized).toContain('https://example.com/wiring');
+  });
+
+  it('article sections are type text with content including teal link and italic why_it_matters', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    // Article sections start at index 2 (after header + intro)
+    const articleSection = sections[2] as { type: string; props: { content: string } };
+    expect(articleSection.type).toBe('text');
+    expect(articleSection.props.content).toContain('color:#0f766e');
+    expect(articleSection.props.content).toContain('font-style:italic');
+  });
+
+  it('intro text section includes the date range label', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    const intro = sections[1] as { type: string; props: { content: string } };
+    expect(intro.type).toBe('text');
+    // Should contain date range (14 Jun and 21 Jun in en-AU format)
+    expect(intro.props.content).toContain('14 Jun');
+    expect(intro.props.content).toContain('21 Jun');
+  });
+
+  it('escapes HTML special chars in article title and why_it_matters', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections(fakeArticles, dateRange);
+    const serialized = JSON.stringify(sections);
+    // Article 3 has <2026> in title — must be escaped
+    expect(serialized).not.toContain('<2026>');
+    expect(serialized).toContain('&lt;2026&gt;');
+    // why_it_matters has &amp; and "
+    expect(serialized).toContain('Important &amp; &quot;urgent&quot;');
+  });
+
+  it('handles zero articles gracefully: header + intro + footer only', async () => {
+    vi.resetModules();
+    const { buildDigestSections } = await import('@/lib/digest');
+    const sections = buildDigestSections([], dateRange);
+    expect(sections).toHaveLength(3);
+    expect((sections[0] as { type: string }).type).toBe('header');
+    expect((sections[sections.length - 1] as { type: string }).type).toBe('footer');
+  });
+});
