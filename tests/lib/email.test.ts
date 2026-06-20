@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MemoryProvider, ResendProvider, NitrosendProvider, isValidEmail, type SubscribeMeta } from '@/lib/email';
+import { MemoryProvider, ResendProvider, NitrosendProvider, KitProvider, DualProvider, isValidEmail, type SubscribeMeta } from '@/lib/email';
 
 const META: SubscribeMeta = {
   consent: true,
@@ -182,5 +182,105 @@ describe('NitrosendProvider.subscribe', () => {
 
     const body1 = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
     expect(body1.opt_in).toBe(false);
+  });
+});
+
+describe('getProvider', () => {
+  // Save and restore process.env around each test so env mutations don't bleed.
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    savedEnv = {
+      EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+      EMAIL_PROVIDER_API_KEY: process.env.EMAIL_PROVIDER_API_KEY,
+      EMAIL_LIST_ID: process.env.EMAIL_LIST_ID,
+      RESEND_API_KEY: process.env.RESEND_API_KEY,
+      RESEND_SEGMENT_ID: process.env.RESEND_SEGMENT_ID,
+      NITROSEND_API_KEY: process.env.NITROSEND_API_KEY,
+      NITROSEND_LIST_ID: process.env.NITROSEND_LIST_ID,
+    };
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    vi.resetModules();
+  });
+
+  it('EMAIL_PROVIDER=dual returns DualProvider with Kit primary and NitroSend secondary', async () => {
+    process.env.EMAIL_PROVIDER = 'dual';
+    process.env.EMAIL_PROVIDER_API_KEY = 'kit_key';
+    process.env.EMAIL_LIST_ID = 'kit_form_id';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+
+    vi.resetModules();
+    // Import all class refs from the same fresh module so instanceof checks use
+    // the same constructor identity as the one getProvider() used to build the object.
+    const email = await import('@/lib/email');
+    const p = email.getProvider();
+
+    expect(p).toBeInstanceOf(email.DualProvider);
+    expect((p as any).primary).toBeInstanceOf(email.KitProvider);
+    expect((p as any).secondary).toBeInstanceOf(email.NitrosendProvider);
+  });
+
+  it('EMAIL_PROVIDER=nitrosend throws when NITROSEND_API_KEY is missing', async () => {
+    process.env.EMAIL_PROVIDER = 'nitrosend';
+    delete process.env.NITROSEND_API_KEY;
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(() => getProvider()).toThrow(/NITROSEND_API_KEY/);
+  });
+
+  it('EMAIL_PROVIDER=nitrosend throws when NITROSEND_LIST_ID is missing', async () => {
+    process.env.EMAIL_PROVIDER = 'nitrosend';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    delete process.env.NITROSEND_LIST_ID;
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(() => getProvider()).toThrow(/NITROSEND_LIST_ID/);
+  });
+
+  it('EMAIL_PROVIDER=nitrosend returns NitrosendProvider when env is complete', async () => {
+    process.env.EMAIL_PROVIDER = 'nitrosend';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+
+    vi.resetModules();
+    // Same-module import so instanceof uses the same constructor identity.
+    const email = await import('@/lib/email');
+    const p = email.getProvider();
+
+    expect(p).toBeInstanceOf(email.NitrosendProvider);
+  });
+
+  it('EMAIL_PROVIDER=dual throws when NITROSEND_API_KEY is missing', async () => {
+    process.env.EMAIL_PROVIDER = 'dual';
+    process.env.EMAIL_PROVIDER_API_KEY = 'kit_key';
+    process.env.EMAIL_LIST_ID = 'kit_form_id';
+    delete process.env.NITROSEND_API_KEY;
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(() => getProvider()).toThrow(/NITROSEND_API_KEY/);
+  });
+
+  it('EMAIL_PROVIDER=dual throws when EMAIL_PROVIDER_API_KEY is missing', async () => {
+    process.env.EMAIL_PROVIDER = 'dual';
+    delete process.env.EMAIL_PROVIDER_API_KEY;
+    process.env.EMAIL_LIST_ID = 'kit_form_id';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(() => getProvider()).toThrow(/EMAIL_PROVIDER_API_KEY/);
   });
 });

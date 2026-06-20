@@ -171,6 +171,8 @@ export function getProvider(): EmailProvider {
   const listId = (import.meta.env.EMAIL_LIST_ID ?? process.env.EMAIL_LIST_ID ?? '') as string;
   const resendKey = (import.meta.env.RESEND_API_KEY ?? process.env.RESEND_API_KEY ?? '') as string;
   const resendSeg = (import.meta.env.RESEND_SEGMENT_ID ?? process.env.RESEND_SEGMENT_ID ?? '') as string;
+  const nitroKey = (import.meta.env.NITROSEND_API_KEY ?? process.env.NITROSEND_API_KEY ?? '') as string;
+  const nitroList = (import.meta.env.NITROSEND_LIST_ID ?? process.env.NITROSEND_LIST_ID ?? '') as string;
   switch (which) {
     case 'kit':       return new KitProvider(apiKey, listId);
     case 'mailchimp': return new MailchimpProvider(apiKey, listId);
@@ -179,14 +181,18 @@ export function getProvider(): EmailProvider {
       if (!resendKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
       if (!resendSeg) throw new Error('RESEND_SEGMENT_ID is required when EMAIL_PROVIDER=resend');
       return new ResendProvider(resendKey, resendSeg);
+    case 'nitrosend':
+      if (!nitroKey)  throw new Error('NITROSEND_API_KEY is required when EMAIL_PROVIDER=nitrosend');
+      if (!nitroList) throw new Error('NITROSEND_LIST_ID is required when EMAIL_PROVIDER=nitrosend');
+      return new NitrosendProvider(nitroKey, nitroList);
     case 'dual': {
-      if (!resendKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=dual');
-      if (!resendSeg) throw new Error('RESEND_SEGMENT_ID is required when EMAIL_PROVIDER=dual');
       if (!apiKey)    throw new Error('EMAIL_PROVIDER_API_KEY (Kit API key) is required when EMAIL_PROVIDER=dual');
       if (!listId)    throw new Error('EMAIL_LIST_ID (Kit form ID) is required when EMAIL_PROVIDER=dual');
+      if (!nitroKey)  throw new Error('NITROSEND_API_KEY is required when EMAIL_PROVIDER=dual');
+      if (!nitroList) throw new Error('NITROSEND_LIST_ID is required when EMAIL_PROVIDER=dual');
       return new DualProvider(
-        new ResendProvider(resendKey, resendSeg),
-        new KitProvider(apiKey, listId)
+        new KitProvider(apiKey, listId),
+        new NitrosendProvider(nitroKey, nitroList)
       );
     }
     default: throw new Error(`Unknown EMAIL_PROVIDER: ${which}`);
