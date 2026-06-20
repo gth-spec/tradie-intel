@@ -123,6 +123,35 @@ export class ResendProvider implements EmailProvider {
   }
 }
 
+export class NitrosendProvider implements EmailProvider {
+  constructor(private apiKey: string, private listId: string) {}
+  async subscribe(email: string, meta: SubscribeMeta): Promise<void> {
+    if (!isValidEmail(email)) throw new Error('Invalid email');
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + this.apiKey
+    };
+    // Step 1: create contact (422 = already exists → treat as success)
+    const contactRes = await fetch('https://api.nitrosend.com/v1/my/contacts', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email, opt_in: meta.consent })
+    });
+    if (!contactRes.ok && contactRes.status !== 422) {
+      throw new Error(`Nitrosend contact create error: ${contactRes.status} ${await contactRes.text()}`);
+    }
+    // Step 2: add to list
+    const listRes = await fetch(`https://api.nitrosend.com/v1/my/lists/${this.listId}/contacts/bulk`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'add', emails: [email] })
+    });
+    if (!listRes.ok) {
+      throw new Error(`Nitrosend list add error: ${listRes.status} ${await listRes.text()}`);
+    }
+  }
+}
+
 // Writes to two providers concurrently. The primary provider is authoritative —
 // its failure surfaces as an error. The secondary is fire-and-forget; its failure
 // is logged but does not fail the subscribe call.
