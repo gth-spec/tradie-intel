@@ -154,7 +154,25 @@ export async function reconcileNitrosendList(
     after = data.pagination.end_cursor;
   }
 
-  // Bulk-add all collected emails to NitroSend in chunks of 200
+  // Ensure each email exists as a NitroSend contact FIRST. The bulk-add
+  // endpoint only adds contacts that already exist — net-new emails come back
+  // as not_found and are silently skipped (which would leave the send list
+  // empty). Kit form subscribers are confirmed + consented, so create them
+  // opt_in:true, then add to the list. (For very large lists, POST /imports
+  // CSV would beat per-email creates given the 2 req/s limit; fine at current volume.)
+  for (const email of emails) {
+    const contactRes = await fetch(`${BASE_URL}/contacts`, {
+      method: 'POST',
+      headers: headers(nitroKey),
+      body: JSON.stringify({ email, opt_in: true })
+    });
+    if (!contactRes.ok && contactRes.status !== 422) {
+      const text = await contactRes.text();
+      throw new Error(`Nitrosend contact create error: ${contactRes.status} ${text}`);
+    }
+  }
+
+  // Bulk-add all collected emails to NitroSend in chunks of 200 (now they exist)
   for (let i = 0; i < emails.length; i += BULK_CHUNK_SIZE) {
     const chunk = emails.slice(i, i + BULK_CHUNK_SIZE);
     const nitroRes = await fetch(`${BASE_URL}/lists/${listId}/contacts/bulk`, {
