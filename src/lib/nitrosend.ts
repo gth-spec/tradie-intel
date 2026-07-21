@@ -142,12 +142,15 @@ export async function reconcileNitrosendList(
     }
 
     const data = await kitRes.json() as {
-      subscribers: Array<{ email_address: string }>;
+      subscribers: Array<{ email_address: string; state: string }>;
       pagination: { has_next_page: boolean; end_cursor: string | null };
     };
 
+    // Only sync active subscribers — Kit still returns cancelled/unsubscribed
+    // records on this endpoint, and re-adding them to the NitroSend list would
+    // re-include people who opted out (Spam Act consent risk).
     for (const sub of data.subscribers) {
-      emails.push(sub.email_address);
+      if (sub.state === 'active') emails.push(sub.email_address);
     }
 
     if (!data.pagination.has_next_page) break;

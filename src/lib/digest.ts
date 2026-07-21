@@ -90,7 +90,11 @@ export async function getLastDigestArticleIds(supabase: SupabaseClient): Promise
 }
 
 export async function hasRecentDigestRun(supabase: SupabaseClient): Promise<boolean> {
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // ponytail: cron fires weekly at a fixed wall-clock time, so last week's row
+  // lands only seconds inside a naive 7-day cutoff (it happened 2026-07-21,
+  // silently skipping the digest). 6 days gives a full day of slack; revisit
+  // if the cron schedule ever moves off a fixed weekly time.
+  const cutoff = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('digest_runs')
     .select('id')
@@ -158,71 +162,6 @@ export function getDateRange(): DateRange {
   return { start, end };
 }
 
-export function buildEmailHtml(articles: DigestItem[], dateRange: DateRange): string {
-  const startLabel = formatShortDate(dateRange.start);
-  const endLabel = formatShortDate(dateRange.end);
-  const rangeLabel = `${startLabel} - ${endLabel}`;
-  const previewText = articles[0]
-    ? articles[0].ai_summary.slice(0, 140)
-    : 'Your weekly trades industry intelligence.';
-
-  const articlesHtml = articles.map(a => `
-      <tr>
-        <td style="padding:24px 0;border-bottom:1px solid #e5e7eb;">
-          <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;line-height:1.3;">
-            <a href="${escapeHtml(a.original_url)}" style="color:#0f766e;text-decoration:none;">${escapeHtml(a.title)}</a>
-          </h2>
-          <p style="margin:0 0 8px;font-size:15px;color:#374151;line-height:1.6;">${escapeHtml(a.ai_summary)}</p>
-          <p style="margin:0 0 12px;font-size:13px;color:#6b7280;font-style:italic;">${escapeHtml(a.why_it_matters)}</p>
-          <span style="font-size:12px;color:#9ca3af;">${escapeHtml(a.source)}</span>
-          <a href="${escapeHtml(a.original_url)}" style="margin-left:12px;font-size:13px;color:#0f766e;">Read more →</a>
-        </td>
-      </tr>`).join('');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>This week in trades: ${escapeHtml(rangeLabel)}</title>
-</head>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f9fafb;">${escapeHtml(previewText)}</div>
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9fafb;">
-  <tr><td align="center" style="padding:32px 16px;">
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
-      <tr>
-        <td style="background:#0f766e;padding:24px 32px;">
-          <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">TradieIntel</h1>
-          <p style="margin:6px 0 0;color:#99f6e4;font-size:13px;">Weekly Intel - ${escapeHtml(rangeLabel)}</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:24px 32px 0;">
-          <p style="margin:0;font-size:15px;color:#374151;line-height:1.6;">Here's what's worth knowing in the trades sector this week.</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:0 32px;">
-          <table width="100%" cellpadding="0" cellspacing="0" border="0">
-            ${articlesHtml}
-          </table>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:32px;background:#f9fafb;text-align:center;border-top:1px solid #e5e7eb;">
-          <p style="margin:0 0 6px;font-size:12px;color:#6b7280;">Also free: <a href="https://grokoryai.com/downloads/GrokoryAI-AI-Readiness-Checklist.pdf" style="color:#6b7280;text-decoration:underline;">AI Readiness Checklist</a> &nbsp;·&nbsp; <a href="https://grokoryai.com/tools/ai-policy-generator/?utm_source=tradieintel" style="color:#6b7280;text-decoration:underline;">AI Policy Generator for trades businesses →</a></p>
-          <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">You're receiving this because you subscribed at tradieintel.com.au</p>
-          <p style="margin:0;font-size:12px;color:#9ca3af;">© GrokoryAI - <a href="{{unsubscribe_link}}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a></p>
-        </td>
-      </tr>
-    </table>
-  </td></tr>
-</table>
-</body>
-</html>`;
-}
-
 // ── NitroSend section-based digest builder ────────────────────────────────────
 // Returns an array of NitroSend section objects compatible with
 // `design.sections[]` in the PATCH /templates call.
@@ -279,79 +218,6 @@ export function buildDigestSections(articles: DigestItem[], dateRange: DateRange
   sections.push({ type: 'footer' });
 
   return sections;
-}
-
-// ── Resend API client ────────────────────────────────────────────────────────
-
-export interface CreateResendBroadcastInput {
-  segmentId: string;
-  from: string;
-  subject: string;
-  html: string;
-  name: string;
-  replyTo?: string;
-}
-
-export async function createResendBroadcast(
-  apiKey: string,
-  input: CreateResendBroadcastInput
-): Promise<string> {
-  const body: Record<string, unknown> = {
-    segment_id: input.segmentId,
-    from: input.from,
-    subject: input.subject,
-    html: input.html,
-    name: input.name
-  };
-  if (input.replyTo) body.reply_to = input.replyTo;
-
-  const res = await fetch('https://api.resend.com/broadcasts', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    throw new Error(`Resend broadcast create error: ${res.status} ${await res.text()}`);
-  }
-  const data = await res.json() as { id?: string };
-  if (!data.id) throw new Error('Resend broadcast create: missing id in response');
-  return data.id;
-}
-
-export async function sendResendBroadcast(
-  apiKey: string,
-  broadcastId: string,
-  scheduledAt?: string
-): Promise<void> {
-  const body = scheduledAt ? { scheduled_at: scheduledAt } : {};
-  const res = await fetch(`https://api.resend.com/broadcasts/${broadcastId}/send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    throw new Error(`Resend broadcast send error: ${res.status} ${await res.text()}`);
-  }
-}
-
-export async function deleteResendBroadcast(
-  apiKey: string,
-  broadcastId: string
-): Promise<void> {
-  const res = await fetch(`https://api.resend.com/broadcasts/${broadcastId}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${apiKey}` }
-  });
-  if (res.status === 404) return;
-  if (!res.ok) {
-    throw new Error(`Resend broadcast delete error: ${res.status} ${await res.text()}`);
-  }
 }
 
 // ── AgentMail QA send ─────────────────────────────────────────────────────────

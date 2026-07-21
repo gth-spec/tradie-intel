@@ -247,8 +247,8 @@ describe('reconcileNitrosendList', () => {
       new Response(
         JSON.stringify({
           subscribers: [
-            { email_address: 'a@b.com' },
-            { email_address: 'c@d.com' }
+            { email_address: 'a@b.com', state: 'active' },
+            { email_address: 'c@d.com', state: 'active' }
           ],
           pagination: { has_next_page: false, end_cursor: null }
         }),
@@ -309,7 +309,7 @@ describe('reconcileNitrosendList', () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          subscribers: [{ email_address: 'existing@example.com' }],
+          subscribers: [{ email_address: 'existing@example.com', state: 'active' }],
           pagination: { has_next_page: false, end_cursor: null }
         }),
         { status: 200 }
@@ -342,7 +342,7 @@ describe('reconcileNitrosendList', () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          subscribers: [{ email_address: 'fail@example.com' }],
+          subscribers: [{ email_address: 'fail@example.com', state: 'active' }],
           pagination: { has_next_page: false, end_cursor: null }
         }),
         { status: 200 }
@@ -364,7 +364,7 @@ describe('reconcileNitrosendList', () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          subscribers: [{ email_address: 'first@example.com' }],
+          subscribers: [{ email_address: 'first@example.com', state: 'active' }],
           pagination: { has_next_page: true, end_cursor: 'X' }
         }),
         { status: 200 }
@@ -374,7 +374,7 @@ describe('reconcileNitrosendList', () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          subscribers: [{ email_address: 'second@example.com' }],
+          subscribers: [{ email_address: 'second@example.com', state: 'active' }],
           pagination: { has_next_page: false, end_cursor: null }
         }),
         { status: 200 }
@@ -413,6 +413,36 @@ describe('reconcileNitrosendList', () => {
     });
   });
 
+  it('excludes non-active Kit subscribers from the NitroSend sync (Spam Act suppression)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          subscribers: [
+            { email_address: 'active@example.com', state: 'active' },
+            { email_address: 'cancelled@example.com', state: 'cancelled' }
+          ],
+          pagination: { has_next_page: false, end_cursor: null }
+        }),
+        { status: 200 }
+      )
+    );
+    // Only one contact-create expected (for the active subscriber)
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 1 }), { status: 201 })
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+
+    const { reconcileNitrosendList } = await import('@/lib/nitrosend');
+    const count = await reconcileNitrosendList(NITRO_KEY, LIST_ID, KIT_KEY, FORM_ID);
+
+    expect(count).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const [, bulkInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect(JSON.parse(bulkInit.body as string)).toEqual({ action: 'add', emails: ['active@example.com'] });
+  });
+
   it('throws a descriptive error on Kit non-2xx response', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('Unauthorized', { status: 401 })
@@ -429,7 +459,7 @@ describe('reconcileNitrosendList', () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          subscribers: [{ email_address: 'a@b.com' }],
+          subscribers: [{ email_address: 'a@b.com', state: 'active' }],
           pagination: { has_next_page: false, end_cursor: null }
         }),
         { status: 200 }

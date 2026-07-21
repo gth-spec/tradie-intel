@@ -201,60 +201,6 @@ describe('hasRecentDigestRun', () => {
   });
 });
 
-// ── Email HTML builder ───────────────────────────────────────────────────────
-
-describe('buildEmailHtml', () => {
-  it('includes all article titles in output', async () => {
-    vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const articles = [
-      makeItem({ title: 'Plumbing code update 2026', ai_summary: 'Summary one.', why_it_matters: 'Affects all plumbers.' }),
-      makeItem({ id: 'uuid-2', title: 'HVAC regulations change', ai_summary: 'Summary two.', why_it_matters: 'Affects HVAC operators.' })
-    ];
-    const dateRange = { start: new Date('2026-05-19'), end: new Date('2026-05-25') };
-    const html = buildEmailHtml(articles, dateRange);
-    expect(html).toContain('Plumbing code update 2026');
-    expect(html).toContain('HVAC regulations change');
-  });
-
-  it('includes date range in output', async () => {
-    vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const html = buildEmailHtml(
-      [makeItem()],
-      { start: new Date('2026-05-19'), end: new Date('2026-05-25') }
-    );
-    expect(html).toContain('19 May');
-    expect(html).toContain('25 May');
-  });
-
-  it('escapes HTML special characters in article content', async () => {
-    vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const article = makeItem({ title: 'Test <script>alert(1)</script>', ai_summary: 'Safe & clean.' });
-    const html = buildEmailHtml([article], { start: new Date(), end: new Date() });
-    expect(html).not.toContain('<script>');
-    expect(html).toContain('&lt;script&gt;');
-    expect(html).toContain('Safe &amp; clean.');
-  });
-
-  it('includes preview text as hidden div', async () => {
-    vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const article = makeItem({ ai_summary: 'This is the first article summary for preview.' });
-    const html = buildEmailHtml([article], { start: new Date(), end: new Date() });
-    expect(html).toContain('This is the first article summary for preview.');
-    expect(html).toMatch(/display:none[^>]*>This is the first/);
-  });
-
-  it('includes unsubscribe placeholder', async () => {
-    vi.resetModules();
-    const { buildEmailHtml } = await import('@/lib/digest');
-    const html = buildEmailHtml([makeItem()], { start: new Date(), end: new Date() });
-    expect(html).toContain('{{unsubscribe_link}}');
-  });
-});
-
 describe('getDateRange', () => {
   it('returns a 7-day window ending at the time of call', async () => {
     vi.resetModules();
@@ -263,96 +209,6 @@ describe('getDateRange', () => {
     const diffMs = range.end.getTime() - range.start.getTime();
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
     expect(diffDays).toBeCloseTo(7, 0);
-  });
-});
-
-// ── Resend API client ────────────────────────────────────────────────────────
-
-describe('createResendBroadcast', () => {
-  beforeEach(() => { vi.spyOn(global, 'fetch'); });
-  afterEach(() => { vi.restoreAllMocks(); });
-
-  it('POSTs to /broadcasts with segment_id, from, subject, html, name and returns id', async () => {
-    const { createResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'bc-123' }), { status: 200 })
-    );
-    const id = await createResendBroadcast('re_key', {
-      segmentId: 'seg-1',
-      from: 'TradieIntel <hello@tradieintel.com.au>',
-      subject: 'Weekly digest',
-      html: '<p>hi</p>',
-      name: 'Weekly Digest - 2026-05-27'
-    });
-    expect(id).toBe('bc-123');
-    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe('https://api.resend.com/broadcasts');
-    expect(init.method).toBe('POST');
-    expect(init.headers['Authorization']).toBe('Bearer re_key');
-    const body = JSON.parse(init.body);
-    expect(body).toEqual({
-      segment_id: 'seg-1',
-      from: 'TradieIntel <hello@tradieintel.com.au>',
-      subject: 'Weekly digest',
-      html: '<p>hi</p>',
-      name: 'Weekly Digest - 2026-05-27'
-    });
-  });
-
-  it('throws when Resend returns a non-2xx', async () => {
-    const { createResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response('bad domain', { status: 422 })
-    );
-    await expect(createResendBroadcast('re_key', {
-      segmentId: 's', from: 'a@b.com', subject: 's', html: '<p/>', name: 'n'
-    })).rejects.toThrow('Resend broadcast create error: 422');
-  });
-
-  it('throws when response is missing id', async () => {
-    const { createResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(JSON.stringify({}), { status: 200 })
-    );
-    await expect(createResendBroadcast('re_key', {
-      segmentId: 's', from: 'a@b.com', subject: 's', html: '<p/>', name: 'n'
-    })).rejects.toThrow('missing id');
-  });
-});
-
-describe('sendResendBroadcast', () => {
-  beforeEach(() => { vi.spyOn(global, 'fetch'); });
-  afterEach(() => { vi.restoreAllMocks(); });
-
-  it('POSTs to /broadcasts/{id}/send with empty body when no scheduledAt', async () => {
-    const { sendResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'bc-123' }), { status: 200 })
-    );
-    await sendResendBroadcast('re_key', 'bc-123');
-    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe('https://api.resend.com/broadcasts/bc-123/send');
-    expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({});
-  });
-
-  it('passes scheduled_at when provided', async () => {
-    const { sendResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'bc-123' }), { status: 200 })
-    );
-    await sendResendBroadcast('re_key', 'bc-123', 'in 5 minutes');
-    const init = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(JSON.parse(init.body)).toEqual({ scheduled_at: 'in 5 minutes' });
-  });
-
-  it('throws when Resend returns a non-2xx', async () => {
-    const { sendResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response('not found', { status: 404 })
-    );
-    await expect(sendResendBroadcast('re_key', 'missing'))
-      .rejects.toThrow('Resend broadcast send error: 404');
   });
 });
 
@@ -395,41 +251,6 @@ describe('sendQaEmail', () => {
     await expect(sendQaEmail('bad-key', {
       subject: 'Test', html: '<p>test</p>'
     })).rejects.toThrow('AgentMail send error: 400');
-  });
-});
-
-describe('deleteResendBroadcast', () => {
-  beforeEach(() => { vi.spyOn(global, 'fetch'); });
-  afterEach(() => { vi.restoreAllMocks(); });
-
-  it('DELETEs /broadcasts/{id} with Bearer auth and no body', async () => {
-    const { deleteResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(JSON.stringify({ object: 'broadcast', id: 'bc-1', deleted: true }), { status: 200 })
-    );
-    await deleteResendBroadcast('re_key', 'bc-1');
-    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe('https://api.resend.com/broadcasts/bc-1');
-    expect(init.method).toBe('DELETE');
-    expect(init.headers['Authorization']).toBe('Bearer re_key');
-    expect(init.body).toBeUndefined();
-  });
-
-  it('tolerates 404 silently (already deleted)', async () => {
-    const { deleteResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response('not found', { status: 404 })
-    );
-    await expect(deleteResendBroadcast('re_key', 'gone')).resolves.toBeUndefined();
-  });
-
-  it('throws on other non-2xx (e.g. 500)', async () => {
-    const { deleteResendBroadcast } = await import('@/lib/digest');
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response('server error', { status: 500 })
-    );
-    await expect(deleteResendBroadcast('re_key', 'bc-1'))
-      .rejects.toThrow('Resend broadcast delete error: 500');
   });
 });
 
