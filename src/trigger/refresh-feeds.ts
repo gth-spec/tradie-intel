@@ -26,6 +26,21 @@ import { enrichItemTask, type EnrichItemPayload } from "./enrich-item";
 const MAX_NEW_ITEMS_PER_RUN = 30;
 const MAX_AGE_DAYS = 14;
 
+// Strips a trailing slash so 'https://x.com/a' and 'https://x.com/a/' dedupe
+// as the same article — Sourceable has served both forms across scrapes,
+// which let the same story land in feed_items twice and double up a digest.
+export function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
+      u.pathname = u.pathname.slice(0, -1);
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 interface RefreshSummary {
   dryRun: boolean;
   feeds: number;
@@ -47,7 +62,7 @@ async function orchestrate(dryRun: boolean): Promise<RefreshSummary> {
     .eq("niche", SITE.niche);
   if (error) throw new Error(`Failed to load existing URLs: ${error.message}`);
   const existing = new Set<string>(
-    (data ?? []).map((r: { original_url: string }) => r.original_url)
+    (data ?? []).map((r: { original_url: string }) => normalizeUrl(r.original_url))
   );
 
   // Fan out: one fetch-feed run per feed. Results are order-aligned to input.
@@ -73,10 +88,11 @@ async function orchestrate(dryRun: boolean): Promise<RefreshSummary> {
     let feedNew = 0;
     for (const item of result.output) {
       if (remaining <= 0) break;
-      if (existing.has(item.url)) continue;
+      const url = normalizeUrl(item.url);
+      if (existing.has(url)) continue;
       if (new Date(item.publishedAt).getTime() < cutoff) continue;
-      existing.add(item.url);
-      toEnrich.push({ payload: { ...item, feedName: feed.name, feedUrl: feed.url } });
+      existing.add(url);
+      toEnrich.push({ payload: { ...item, url, feedName: feed.name, feedUrl: feed.url } });
       remaining--;
       feedNew++;
     }
