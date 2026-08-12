@@ -1,3 +1,5 @@
+import type { ConsentScope } from './consent';
+
 export interface SubscribeMeta {
   consent: boolean;
   consent_timestamp: string;
@@ -130,25 +132,41 @@ export class DualProvider implements EmailProvider {
   }
 }
 
-export function getProvider(): EmailProvider {
+/**
+ * Resolves the provider for one consent scope.
+ *
+ * Returns `null` - not an error - when the scope has no destination list configured.
+ * That is the expected state for `grokoryai_commercial` until a commercial list is
+ * provisioned: consent is still recorded, the subscribe call is simply skipped.
+ *
+ * NOTE: env vars are read with static property access on `import.meta.env`, never a
+ * computed key. Vite/Astro statically replaces `import.meta.env.FOO` at build time;
+ * `import.meta.env[expr]` is NOT replaced and resolves to undefined in production.
+ */
+export function getProvider(scope: ConsentScope): EmailProvider | null {
   const which = (import.meta.env.EMAIL_PROVIDER ?? process.env.EMAIL_PROVIDER) as string;
   const apiKey = (import.meta.env.EMAIL_PROVIDER_API_KEY ?? process.env.EMAIL_PROVIDER_API_KEY ?? '') as string;
-  const listId = (import.meta.env.EMAIL_LIST_ID ?? process.env.EMAIL_LIST_ID ?? '') as string;
   const nitroKey = (import.meta.env.NITROSEND_API_KEY ?? process.env.NITROSEND_API_KEY ?? '') as string;
-  const nitroList = (import.meta.env.NITROSEND_LIST_ID ?? process.env.NITROSEND_LIST_ID ?? '') as string;
+
+  const commercial = scope === 'grokoryai_commercial';
+  const listId = ((commercial
+    ? (import.meta.env.EMAIL_LIST_ID_COMMERCIAL ?? process.env.EMAIL_LIST_ID_COMMERCIAL)
+    : (import.meta.env.EMAIL_LIST_ID ?? process.env.EMAIL_LIST_ID)) ?? '') as string;
+  const nitroList = ((commercial
+    ? (import.meta.env.NITROSEND_LIST_ID_COMMERCIAL ?? process.env.NITROSEND_LIST_ID_COMMERCIAL)
+    : (import.meta.env.NITROSEND_LIST_ID ?? process.env.NITROSEND_LIST_ID)) ?? '') as string;
+
   switch (which) {
-    case 'kit':       return new KitProvider(apiKey, listId);
-    case 'mailchimp': return new MailchimpProvider(apiKey, listId);
     case 'memory':    return new MemoryProvider();
+    case 'kit':       return listId ? new KitProvider(apiKey, listId) : null;
+    case 'mailchimp': return listId ? new MailchimpProvider(apiKey, listId) : null;
     case 'nitrosend':
-      if (!nitroKey)  throw new Error('NITROSEND_API_KEY is required when EMAIL_PROVIDER=nitrosend');
-      if (!nitroList) throw new Error('NITROSEND_LIST_ID is required when EMAIL_PROVIDER=nitrosend');
-      return new NitrosendProvider(nitroKey, nitroList);
+      if (!nitroKey) throw new Error('NITROSEND_API_KEY is required when EMAIL_PROVIDER=nitrosend');
+      return nitroList ? new NitrosendProvider(nitroKey, nitroList) : null;
     case 'dual': {
-      if (!apiKey)    throw new Error('EMAIL_PROVIDER_API_KEY (Kit API key) is required when EMAIL_PROVIDER=dual');
-      if (!listId)    throw new Error('EMAIL_LIST_ID (Kit form ID) is required when EMAIL_PROVIDER=dual');
-      if (!nitroKey)  throw new Error('NITROSEND_API_KEY is required when EMAIL_PROVIDER=dual');
-      if (!nitroList) throw new Error('NITROSEND_LIST_ID is required when EMAIL_PROVIDER=dual');
+      if (!apiKey)   throw new Error('EMAIL_PROVIDER_API_KEY (Kit API key) is required when EMAIL_PROVIDER=dual');
+      if (!nitroKey) throw new Error('NITROSEND_API_KEY is required when EMAIL_PROVIDER=dual');
+      if (!listId || !nitroList) return null;
       return new DualProvider(
         new KitProvider(apiKey, listId),
         new NitrosendProvider(nitroKey, nitroList)

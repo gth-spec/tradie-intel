@@ -127,7 +127,7 @@ describe('NitrosendProvider.subscribe', () => {
   });
 });
 
-describe('getProvider', () => {
+describe('getProvider(scope)', () => {
   // Save and restore process.env around each test so env mutations don't bleed.
   let savedEnv: Record<string, string | undefined>;
 
@@ -136,8 +136,10 @@ describe('getProvider', () => {
       EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
       EMAIL_PROVIDER_API_KEY: process.env.EMAIL_PROVIDER_API_KEY,
       EMAIL_LIST_ID: process.env.EMAIL_LIST_ID,
+      EMAIL_LIST_ID_COMMERCIAL: process.env.EMAIL_LIST_ID_COMMERCIAL,
       NITROSEND_API_KEY: process.env.NITROSEND_API_KEY,
       NITROSEND_LIST_ID: process.env.NITROSEND_LIST_ID,
+      NITROSEND_LIST_ID_COMMERCIAL: process.env.NITROSEND_LIST_ID_COMMERCIAL,
     };
   });
 
@@ -160,7 +162,7 @@ describe('getProvider', () => {
     // Import all class refs from the same fresh module so instanceof checks use
     // the same constructor identity as the one getProvider() used to build the object.
     const email = await import('@/lib/email');
-    const p = email.getProvider();
+    const p = email.getProvider('tradieintel_digest');
 
     expect(p).toBeInstanceOf(email.DualProvider);
     expect((p as any).primary).toBeInstanceOf(email.KitProvider);
@@ -174,17 +176,17 @@ describe('getProvider', () => {
 
     vi.resetModules();
     const { getProvider } = await import('@/lib/email');
-    expect(() => getProvider()).toThrow(/NITROSEND_API_KEY/);
+    expect(() => getProvider('tradieintel_digest')).toThrow(/NITROSEND_API_KEY/);
   });
 
-  it('EMAIL_PROVIDER=nitrosend throws when NITROSEND_LIST_ID is missing', async () => {
+  it('EMAIL_PROVIDER=nitrosend returns null for the digest scope when NITROSEND_LIST_ID is missing', async () => {
     process.env.EMAIL_PROVIDER = 'nitrosend';
     process.env.NITROSEND_API_KEY = 'ns_key';
     delete process.env.NITROSEND_LIST_ID;
 
     vi.resetModules();
     const { getProvider } = await import('@/lib/email');
-    expect(() => getProvider()).toThrow(/NITROSEND_LIST_ID/);
+    expect(getProvider('tradieintel_digest')).toBeNull();
   });
 
   it('EMAIL_PROVIDER=nitrosend returns NitrosendProvider when env is complete', async () => {
@@ -195,7 +197,7 @@ describe('getProvider', () => {
     vi.resetModules();
     // Same-module import so instanceof uses the same constructor identity.
     const email = await import('@/lib/email');
-    const p = email.getProvider();
+    const p = email.getProvider('tradieintel_digest');
 
     expect(p).toBeInstanceOf(email.NitrosendProvider);
   });
@@ -209,7 +211,7 @@ describe('getProvider', () => {
 
     vi.resetModules();
     const { getProvider } = await import('@/lib/email');
-    expect(() => getProvider()).toThrow(/NITROSEND_API_KEY/);
+    expect(() => getProvider('tradieintel_digest')).toThrow(/NITROSEND_API_KEY/);
   });
 
   it('EMAIL_PROVIDER=dual throws when EMAIL_PROVIDER_API_KEY is missing', async () => {
@@ -221,6 +223,71 @@ describe('getProvider', () => {
 
     vi.resetModules();
     const { getProvider } = await import('@/lib/email');
-    expect(() => getProvider()).toThrow(/EMAIL_PROVIDER_API_KEY/);
+    expect(() => getProvider('tradieintel_digest')).toThrow(/EMAIL_PROVIDER_API_KEY/);
+  });
+
+  it('EMAIL_PROVIDER=dual returns null for the digest scope when EMAIL_LIST_ID is missing', async () => {
+    process.env.EMAIL_PROVIDER = 'dual';
+    process.env.EMAIL_PROVIDER_API_KEY = 'kit_key';
+    delete process.env.EMAIL_LIST_ID;
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(getProvider('tradieintel_digest')).toBeNull();
+  });
+
+  it('EMAIL_PROVIDER=dual returns null for the commercial scope when only the digest lists are configured', async () => {
+    process.env.EMAIL_PROVIDER = 'dual';
+    process.env.EMAIL_PROVIDER_API_KEY = 'kit_key';
+    process.env.EMAIL_LIST_ID = 'kit_form_id';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+    delete process.env.EMAIL_LIST_ID_COMMERCIAL;
+    delete process.env.NITROSEND_LIST_ID_COMMERCIAL;
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(getProvider('grokoryai_commercial')).toBeNull();
+  });
+
+  it('returns null for the commercial scope when no commercial list is configured', async () => {
+    process.env.EMAIL_PROVIDER = 'nitrosend';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID = 'ns_list_id';
+    delete process.env.NITROSEND_LIST_ID_COMMERCIAL;
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(getProvider('grokoryai_commercial')).toBeNull();
+  });
+
+  it('returns a provider for the commercial scope once its list is configured', async () => {
+    process.env.EMAIL_PROVIDER = 'nitrosend';
+    process.env.NITROSEND_API_KEY = 'ns_key';
+    process.env.NITROSEND_LIST_ID_COMMERCIAL = 'list-commercial';
+
+    vi.resetModules();
+    const email = await import('@/lib/email');
+    expect(email.getProvider('grokoryai_commercial')).toBeInstanceOf(email.NitrosendProvider);
+  });
+
+  it('EMAIL_PROVIDER=kit returns null when EMAIL_LIST_ID is missing', async () => {
+    process.env.EMAIL_PROVIDER = 'kit';
+    process.env.EMAIL_PROVIDER_API_KEY = 'kit_key';
+    delete process.env.EMAIL_LIST_ID;
+
+    vi.resetModules();
+    const { getProvider } = await import('@/lib/email');
+    expect(getProvider('tradieintel_digest')).toBeNull();
+  });
+
+  it('memory provider ignores list configuration entirely', async () => {
+    process.env.EMAIL_PROVIDER = 'memory';
+
+    vi.resetModules();
+    const email = await import('@/lib/email');
+    expect(email.getProvider('grokoryai_commercial')).toBeInstanceOf(email.MemoryProvider);
   });
 });
