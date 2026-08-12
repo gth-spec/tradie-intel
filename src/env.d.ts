@@ -15,6 +15,10 @@ interface ImportMetaEnv {
   readonly AGENTMAIL_API_KEY: string;
   readonly NITROSEND_API_KEY: string;
   readonly NITROSEND_LIST_ID: string;
+  readonly SUBSCRIBE_TOKEN_SECRET: string;
+  readonly RESEND_API_KEY: string;
+  readonly NITROSEND_LIST_ID_COMMERCIAL: string;
+  readonly EMAIL_LIST_ID_COMMERCIAL: string;
   readonly DIGEST_APPROVER_EMAIL: string;
   readonly PUBLIC_SITE_URL: string;
 }
