@@ -1,0 +1,116 @@
+{
+  "target": "docs/superpowers/specs/2026-08-12-confirmed-opt-in-design.md",
+  "reviewed_at": "2026-08-12",
+  "fixed_at": "2026-08-12",
+  "overall_at_review": "BLOCK",
+  "findings": [
+    {
+      "label": "Bundled dual-brand consent survives the rebuild untouched",
+      "severity": "BLOCK",
+      "dimension": "Regulatory",
+      "location": "§3.3, §3.6; live in src/config/site.ts:15",
+      "fix": "Split consent at capture (required TradieIntel digest, optional GrokoryAI); add scope column to subscriber_consents and record one row per consented sender.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "Confirmation failure and audit-write ordering can produce a subscriber with no consent record",
+      "severity": "BLOCK",
+      "dimension": "Robustness",
+      "location": "§3.3 confirmation steps 3-4",
+      "fix": "Write the consent row before calling provider.subscribe(); wrap subscribe in explicit error handling that renders a retry page and does not consume the token; make the confirm handler re-runnable end to end.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "Reinvents an HMAC token helper that already exists",
+      "severity": "FLAG",
+      "dimension": "Efficiency",
+      "location": "§3.2, §4 (src/lib/consent-token.ts)",
+      "fix": "Generalise signApproveToken/verifyApproveToken from src/lib/digest.ts:47-77 and reuse; keep payload.sig wire format and exp convention.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "Attribution data silently dropped at confirmation",
+      "severity": "FLAG",
+      "dimension": "Flywheel compatibility",
+      "location": "§3.2 token payload, §3.6 audit table",
+      "fix": "Carry referrer + utm_source/medium/campaign in the token payload and add columns for them to subscriber_consents.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "§5 misidentifies which tests invert",
+      "severity": "FLAG",
+      "dimension": "Clarity",
+      "location": "§5 final paragraph",
+      "fix": "Name both inverting tests (test 1 'returns 200 on valid email with consent' and test 6 'forwards consent metadata to the provider'); note that 'returns 400 on invalid email' changes mechanism to handler-side isValidEmail().",
+      "outcome": "fixed"
+    },
+    {
+      "label": "Rate limiting lands after the switch-over",
+      "severity": "FLAG",
+      "dimension": "Efficiency",
+      "location": "§6 steps 5-6",
+      "fix": "Resequence so rate limiting ships before subscribe.ts is rewired.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "New secret introduced with no scope, rotation, or reuse guidance",
+      "severity": "FLAG",
+      "dimension": "Security",
+      "location": "§3.2, §4 (.env.example)",
+      "fix": "State SUBSCRIBE_TOKEN_SECRET must be distinct from CRON_SECRET; name a rotation trigger and note rotation invalidates in-flight links; set Referrer-Policy: no-referrer on /confirm.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "/confirm has no indexing directive",
+      "severity": "FLAG",
+      "dimension": "SEO/GEO",
+      "location": "§4 (src/pages/confirm.astro)",
+      "fix": "Add noindex,nofollow meta on confirm.astro and disallow /confirm in robots.txt.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "Consent schema cannot express the coming list split",
+      "severity": "FLAG",
+      "dimension": "Future proofing",
+      "location": "§3.6",
+      "fix": "Add scope enum column (tradieintel_digest, grokoryai_commercial) now.",
+      "outcome": "fixed"
+    },
+    {
+      "label": "No provider-layer mechanism to route two consent scopes to two different lists",
+      "severity": "BLOCK",
+      "dimension": "Robustness",
+      "location": "§3.2b (new), §3.3 step 4, §4 (src/lib/email.ts)",
+      "fix": "getProvider(scope) reads scope-specific list env vars and returns null when a scope's list is unconfigured; /confirm treats null as audit-only, skip-subscribe rather than an error.",
+      "note": "Surfaced during fix-up, not in the original review pass — the consent-split fix (finding 1) implied per-scope routing that the provider layer did not support. Fixed in the same pass.",
+      "outcome": "fixed"
+    }
+  ],
+  "verify_fixes_run": {
+    "at": "2026-08-12",
+    "result": "PASS — all 10 prior findings RESOLVED after a second round of edits",
+    "fresh_findings_this_round": [
+      {
+        "label": "requested_at had no source in the token payload",
+        "severity": "FLAG",
+        "dimension": "Clarity",
+        "location": "§3.6 vs §3.2 ConfirmTokenPayload",
+        "cause": "Introduced by the HMAC-reuse fix: adopting the exp-in-payload convention dropped the original issued-at field, orphaning the requested_at column three sections away.",
+        "fix": "Added iat to ConfirmTokenPayload; §3.6 now names iat as the source and explicitly forbids deriving it as exp - 48h.",
+        "outcome": "fixed"
+      },
+      {
+        "label": "Test count contradictory between §5 and §6",
+        "severity": "FLAG",
+        "dimension": "Clarity",
+        "location": "§5 vs §6 step 7",
+        "fix": "§5 now reads 'two invert and a third changes mechanism'; §6 references 'the three tests identified in §5'.",
+        "outcome": "fixed"
+      }
+    ]
+  },
+  "minor_notes_carried_forward": [
+    "KitProvider duplicate-subscribe (upsert vs error) behaviour is unverified — §8 open question 4",
+    "No GrokoryAI commercial list is provisioned in NitroSend/Kit yet — §8 open question 6, non-blocking by design"
+  ]
+}

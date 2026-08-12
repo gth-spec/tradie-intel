@@ -1,0 +1,55 @@
+{
+  "target": "docs/superpowers/plans/2026-08-12-confirmed-opt-in.md",
+  "reviewed_at": "2026-08-12",
+  "fixed_at": "2026-08-12",
+  "overall_at_review": "BLOCK",
+  "overall_after_fixes": "PASS",
+  "findings": [
+    {
+      "label": "Task 3 breaks existing getProvider tests that assert the opposite behaviour",
+      "severity": "BLOCK",
+      "dimension": "Robustness",
+      "location": "Task 3 Step 5; tests/lib/email.test.ts:163,177,187,198,212,224",
+      "fix": "Add a step to Task 3 rewriting the existing describe('getProvider') block: pass 'tradieintel_digest' to all six zero-arg calls, and replace the 'throws when NITROSEND_LIST_ID is missing' test with one asserting null is returned. Correct the expected outcomes in Task 3 Step 5 and Task 5 Step 7.",
+      "outcome": "fixed",
+      "how": "Task 3 Step 2 now supplies the complete replacement block (9 tests, all scoped), keeps the file's existing per-key env save/restore + vi.resetModules() + dynamic-import pattern, and carries an explicit warning not to 'fix' the failure by restoring the throw. Step 5 expectation updated to 'PASS, 9 tests'; Step 6 note updated. Task 5 Step 7's tsc expectation is now accurate as written."
+    },
+    {
+      "label": "supabase db execute is not a real CLI command",
+      "severity": "FLAG",
+      "dimension": "Clarity",
+      "location": "Task 2 Step 3 (two invocations)",
+      "fix": "Replace with `npx supabase db query --linked \"<sql>\"` (verified against supabase CLI 2.101.0).",
+      "outcome": "fixed"
+    },
+    {
+      "label": "New test block diverges from the env save/restore pattern in the same file",
+      "severity": "FLAG",
+      "dimension": "Clarity",
+      "location": "Task 3 Step 2",
+      "fix": "Match the existing pattern: per-key save/restore in beforeEach/afterEach, vi.resetModules() then dynamic import inside each test. Never reassign process.env wholesale.",
+      "outcome": "fixed",
+      "how": "Folded into the same replacement block as the BLOCK fix; the two new commercial list env keys were added to the saved set."
+    },
+    {
+      "label": "Task 0 preflight curl uses an unset RESEND_API_KEY variable",
+      "severity": "FLAG",
+      "dimension": "Security",
+      "location": "Task 0 Step 1",
+      "fix": "Prepend `export RESEND_API_KEY='re_...'` and note the key goes to the shell only for this check, reaching .env.local in Step 3.",
+      "outcome": "fixed"
+    }
+  ],
+  "minor_notes_applied": [
+    "Task 4 Step 5 rewritten to run the real send through a throwaway vitest file (vitest resolves .ts and the @ alias) instead of node -e, which cannot import .ts without a loader",
+    "Task 9 Step 8 cleanup now uses db query --linked",
+    "handleConfirm now documents that a recordConsent failure deliberately propagates to a 500 rather than rendering false success"
+  ],
+  "cross_reference_sweep": {
+    "note": "Run per the rule added to the skill this session. Two references elsewhere were orphaned by the fixes and closed in the same pass.",
+    "found": [
+      "Task 3 Files list still said 'tests/lib/email.test.ts (extend)' after the fix changed the action from append to replace-the-block - corrected",
+      "Task 4 Step 5's new vitest-based send relies on process.env, which Vitest does not populate from .env.local, and Task 0's export lives in a different shell - export lines added"
+    ]
+  }
+}
