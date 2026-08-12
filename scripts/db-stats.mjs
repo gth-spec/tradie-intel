@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-// Print Supabase storage stats for TradieIntel + 12-month growth projection.
+// Print Supabase storage stats for the shared TradieIntel + grokoryai-website
+// project + 12-month growth projection.
+//
+// NOTE: this project (ref in SUPABASE_URL, named "TradieIntel" in the Supabase
+// dashboard) is shared by TWO apps: projects/tradie-intel (feed_items, digest_runs)
+// and projects/grokoryai-website/astro-poc (policies, scorecard_leads,
+// ops_map_leads, ops_prefill_cache). Both draw on the same free-tier budget —
+// see reference_tradieintel_resource_limits memory. Confirmed 2026-08-12 via
+// live schema introspection (all four Astro tables exist, columns as below).
 //
 // Usage:
 //   unset ANTHROPIC_API_KEY && node --env-file=.env scripts/db-stats.mjs
@@ -18,14 +26,30 @@ const KB = 1024;
 const MB = 1024 * 1024;
 
 // Per-table size assumptions. Each row's serialised size including index overhead.
+// Reasoned estimates from column shape, not measured (no pg_total_relation_size
+// RPC deployed) — tune if a table changes shape.
+//
 // feed_items: most fields are bounded; original_content capped at 500 chars;
 //   Claude-generated fields ~100-400 chars each; indexes ~30% overhead.
 // digest_runs: jsonb metadata can carry full HTML payload during draft state;
 //   most rows are status records (small) but the active draft can be ~50 KB.
 //   Using 5 KB average across the lifecycle.
+// policies: mostly bounded text fields + two small text[] arrays, no large jsonb.
+// scorecard_leads: `answers` + `result` (full RetentionResult snapshot for the
+//   report page) + `utm` jsonb — heavier than policies, comparable to feed_items.
+// ops_map_leads: `answers` + `inputs` are small state objects, no report snapshot —
+//   lightest of the lead tables.
+// ops_prefill_cache: `facts` jsonb (GBP profile facts), keyed by `domain` not `id`
+//   (this table has no id column). Self-pruning — purgeExpired() deletes rows past
+//   a 30-day TTL, so this one does NOT grow unbounded like the others; 0 rows as
+//   of 2026-08-12.
 const TABLE_SPECS = {
-  feed_items:  { bytesPerRow: 3 * KB, label: 'Articles' },
-  digest_runs: { bytesPerRow: 5 * KB, label: 'Digest runs' }
+  feed_items:        { bytesPerRow: 3 * KB,   label: 'Articles (tradie-intel)' },
+  digest_runs:       { bytesPerRow: 5 * KB,   label: 'Digest runs (tradie-intel)' },
+  policies:          { bytesPerRow: 1.5 * KB, label: 'AI policies (astro-poc)' },
+  scorecard_leads:   { bytesPerRow: 3 * KB,   label: 'Scorecard leads (astro-poc)' },
+  ops_map_leads:     { bytesPerRow: 1.5 * KB, label: 'Ops Map leads (astro-poc)' },
+  ops_prefill_cache: { bytesPerRow: 1 * KB,   label: 'Ops Map prefill cache (astro-poc)', idColumn: 'domain' }
 };
 
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
@@ -46,10 +70,12 @@ function fmtPct(part, whole) {
 }
 
 async function statsForTable(tableName, spec) {
+  const idCol = spec.idColumn ?? 'id'; // ops_prefill_cache has no `id` column — keyed by `domain`
+
   // 1. Row count
   const { count, error: countErr } = await supa
     .from(tableName)
-    .select('id', { count: 'exact', head: true });
+    .select(idCol, { count: 'exact', head: true });
   if (countErr) {
     return { tableName, error: countErr.message };
   }
@@ -94,7 +120,7 @@ async function statsForTable(tableName, spec) {
 }
 
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('  TradieIntel Supabase storage stats');
+console.log('  Shared Supabase project storage stats (TradieIntel + astro-poc)');
 console.log(`  Generated ${new Date().toISOString()}`);
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
@@ -142,8 +168,9 @@ if (Number.isFinite(yearsToCap)) {
   console.log(`Time to free-tier cap: not measurable (no growth signal yet)`);
 }
 
-console.log(`\nFree tier limits to also watch:`);
+console.log(`\nFree tier limits to also watch (Resend/Firecrawl are TradieIntel-only; not covered here):`);
 console.log(`  • Resend: 3,000 emails/month, 100/day  →  hits at ~750 subscribers × 4 sends`);
 console.log(`  • Firecrawl: 500 scrapes/month         →  hits if scrape sources >~30 weekly`);
-console.log(`  • Vercel: 100 GB bandwidth/month       →  hits at ~100K+ pageviews/month`);
-console.log(`\nCalibration: edit TABLE_SPECS in scripts/db-stats.mjs if table shape changes.`);
+console.log(`  • Vercel: 100 GB bandwidth/month       →  hits at ~100K+ pageviews/month (both sites combined)`);
+console.log(`  • Grafana Cloud (connected 2026-08-12) covers DB infra/connections, NOT these ceilings`);
+console.log(`\nCalibration: edit TABLE_SPECS in scripts/db-stats.mjs if a table shape changes.`);
