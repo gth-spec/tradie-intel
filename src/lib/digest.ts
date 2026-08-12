@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { signToken, verifyToken } from './token';
 // Used by article selection functions added in later tasks.
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -45,35 +45,15 @@ export interface DateRange {
 // ── Token utilities ───────────────────────────────────────────────────────────
 
 export function signApproveToken(runId: string, broadcastId: string, secret: string): string {
-  const payload: ApproveTokenPayload = {
+  return signToken<ApproveTokenPayload>({
     run_id: runId,
     broadcast_id: broadcastId,
     exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
-  };
-  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  return `${payloadB64}.${sig}`;
+  }, secret);
 }
 
 export function verifyApproveToken(token: string, secret: string): ApproveTokenPayload {
-  const dotIdx = token.indexOf('.');
-  if (dotIdx === -1) throw new Error('Invalid token format');
-  const payloadB64 = token.slice(0, dotIdx);
-  const sig = token.slice(dotIdx + 1);
-  const expected = createHmac('sha256', secret).update(payloadB64).digest('base64url');
-  const expectedBuf = Buffer.from(expected, 'ascii');
-  const sigBuf = Buffer.from(sig, 'ascii');
-  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
-    throw new Error('Invalid token signature');
-  }
-  let payload: ApproveTokenPayload;
-  try {
-    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as ApproveTokenPayload;
-  } catch {
-    throw new Error('Invalid token format');
-  }
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
-  return payload;
+  return verifyToken<ApproveTokenPayload>(token, secret);
 }
 
 // ── Article selection ─────────────────────────────────────────────────────────
