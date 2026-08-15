@@ -26,7 +26,7 @@ export const GET: APIRoute = async () => {
 
 > ${SITE.description} Part of the ${SITE.parent.name} network (${SITE.parent.url}). Covers AI tools, automation, industry news, and business intelligence relevant to Australian trade operators - plumbers, electricians, builders, HVAC, and related trades.
 
-Daily AI-curated news feed for Australian tradies. All articles are filtered and summarised by AI for relevance to trade business operators. Site is updated daily via automated feed pipeline.
+AI-curated news feed for Australian tradies. All articles are filtered and summarised by AI for relevance to trade business operators. New articles are added daily via an automated feed pipeline; a curated weekly digest of the top stories is emailed every Tuesday.
 
 ## Key Pages
 

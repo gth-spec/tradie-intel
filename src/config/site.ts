@@ -1,6 +1,6 @@
 export const SITE = {
   name: 'Tradie Intel',
-  description: 'Daily AI-filtered news for Australian tradies.',
+  description: 'Weekly AI-filtered news for Australian tradies.',
   url: 'https://tradieintel.com.au',
   niche: 'trades' as const,
   parent: {
