@@ -1,41 +1,51 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: GPTBot
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: OAI-SearchBot
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: anthropic-ai
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: PerplexityBot
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: Google-Extended
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: Applebot-Extended
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: Bytespider
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 User-agent: cohere-ai
 Allow: /
 Disallow: /api/
+Disallow: /confirm
 
 Sitemap: https://tradieintel.com.au/sitemap.xml

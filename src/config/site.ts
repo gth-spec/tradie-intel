@@ -12,6 +12,7 @@ export const SITE = {
     ctaButton: 'Subscribe free',
     ctaHeadline: 'Weekly trades intel, straight to your inbox',
     ctaSubhead: "The week's best AI-filtered trades news for Australian operators - delivered every Tuesday morning. Plus practical AI opportunities for your trade business.",
-    consentText: 'I agree to receive emails from Tradie Intel and GrokoryAI. I can unsubscribe at any time.'
+    consentTextDigest: 'Send me the TradieIntel weekly digest. (required)',
+    consentTextCommercial: 'Also send me occasional emails from GrokoryAI about AI tools for trades businesses. (optional)'
   }
 };

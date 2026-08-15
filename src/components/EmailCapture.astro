@@ -35,8 +35,13 @@ const { compact = false, source = 'unknown' } = Astro.props;
   </div>
 
   <label class="flex items-start gap-2 text-xs text-white/80">
-    <input type="checkbox" name="consent" required class="mt-0.5" />
-    <span>{SITE.email.consentText}</span>
+    <input type="checkbox" name="consent_digest" required class="mt-0.5" />
+    <span>{SITE.email.consentTextDigest}</span>
+  </label>
+
+  <label class="flex items-start gap-2 text-xs text-white/80 mt-2">
+    <input type="checkbox" name="consent_commercial" class="mt-0.5" />
+    <span>{SITE.email.consentTextCommercial}</span>
   </label>
 </form>
 <p data-subscribe-msg class="mt-2 text-sm text-white/80 hidden" role="status"></p>
@@ -54,11 +59,12 @@ const { compact = false, source = 'unknown' } = Astro.props;
       e.preventDefault();
       const data = new FormData(f);
       const email = data.get('email') as string;
-      const consent = data.get('consent') === 'on';
+      const consentDigest = data.get('consent_digest') === 'on';
+      const consentCommercial = data.get('consent_commercial') === 'on';
       const website = (data.get('website') as string) ?? '';
 
       msg.classList.remove('hidden');
-      msg.textContent = 'Subscribing...';
+      msg.textContent = 'Sending confirmation...';
 
       try {
         const res = await fetch('/api/subscribe', {
@@ -66,7 +72,8 @@ const { compact = false, source = 'unknown' } = Astro.props;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email,
-            consent,
+            consent_digest: consentDigest,
+            consent_commercial: consentCommercial,
             website,
             source: f.dataset.source ?? 'unknown',
             referrer: document.referrer || null,
@@ -77,7 +84,7 @@ const { compact = false, source = 'unknown' } = Astro.props;
         });
         const json = await res.json();
         if (res.ok) {
-          msg.textContent = "You're on the list. Your first digest is on its way - plus a welcome email from GrokoryAI shortly.";
+          msg.textContent = 'Almost done. Check your inbox and click the confirmation link.';
           f.reset();
         } else if (json?.error === 'consent required') {
           msg.textContent = 'Please tick the consent box to continue.';
