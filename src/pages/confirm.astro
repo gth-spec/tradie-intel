@@ -1,0 +1,84 @@
+---
+import { createHash } from 'node:crypto';
+import { handleConfirm } from '@/lib/confirm';
+import { recordConsent } from '@/lib/consent';
+import { getProvider } from '@/lib/email';
+import { adminClient } from '@/lib/supabase';
+
+export const prerender = false;
+
+// Token is in the URL, so keep it out of the Referer of any outbound request.
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+
+// Same guard pattern as src/pages/api/digest/approve.ts and src/pages/api/cron/send-digest.ts:
+// resolve the secret into a local const with an empty-string fallback (so `??` doesn't let an
+// explicitly-empty env var slip through), then fail closed before it ever reaches verifyToken.
+// Without this, an unset var makes every real confirmation link 400 as "not valid" (verifyToken
+// throws inside createHmac, and handleConfirm's catch-all maps that to invalid) with nothing
+// logged; an empty-string var is worse - HMAC would run with an empty key, a deterministic,
+// publicly-computable function, making tokens forgeable.
+const secret = (import.meta.env.SUBSCRIBE_TOKEN_SECRET ?? process.env.SUBSCRIBE_TOKEN_SECRET ?? '') as string;
+if (!secret) console.error('[confirm] SUBSCRIBE_TOKEN_SECRET not set');
+
+const token = Astro.url.searchParams.get('t') ?? '';
+const ip = Astro.request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+const supa = adminClient();
+
+const outcome = !secret
+  ? { status: 'misconfigured' as const }
+  : token
+  ? await handleConfirm(
+      token,
+      {
+        ipHash: ip ? createHash('sha256').update(ip).digest('hex') : null,
+        userAgent: Astro.request.headers.get('user-agent')
+      },
+      {
+        secret,
+        recordConsent: (row) => recordConsent(supa, row),
+        getProviderFor: (scope) => getProvider(scope)
+      }
+    )
+  : { status: 'invalid' as const };
+
+if (outcome.status === 'invalid' || outcome.status === 'expired') Astro.response.status = 400;
+if (outcome.status === 'provider_error') Astro.response.status = 502;
+if (outcome.status === 'misconfigured') Astro.response.status = 500;
+
+const copy = {
+  ok: {
+    heading: "You're confirmed",
+    body: 'Thanks. That address is now on the list, and you can unsubscribe from any email we send.'
+  },
+  expired: {
+    heading: 'That link has expired',
+    body: 'Confirmation links are valid for 48 hours. Sign up again and we will send a fresh one.'
+  },
+  invalid: {
+    heading: 'That link is not valid',
+    body: 'It may have been copied incorrectly. Sign up again and we will send a fresh one.'
+  },
+  provider_error: {
+    heading: 'Almost there',
+    body: 'Your consent was recorded but we could not finish adding you. Click the link in your email again in a minute.'
+  },
+  misconfigured: {
+    heading: 'Something went wrong',
+    body: 'We could not process that confirmation right now. Please try again shortly, or contact us if this keeps happening.'
+  }
+}[outcome.status];
+---
+
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{copy.heading} | Tradie Intel</title>
+  </head>
+  <body style="font-family:system-ui,-apple-system,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1.5rem;line-height:1.6;">
+    <h1 style="font-size:1.5rem;">{copy.heading}</h1>
+    <p>{copy.body}</p>
+    <p><a href="/">Back to Tradie Intel</a></p>
+  </body>
+</html>
