@@ -1737,6 +1737,33 @@ Deploy to production only after every step above passes.
 
 ---
 
+## Known gaps / accepted trade-offs
+
+Every Important-severity code-review finding across Tasks 1-7 was fixed and independently re-verified (see the task commits and the `--verify-fixes` passes in conversation history). The items below are Minor-severity or Recommended items that reviewers explicitly assessed as *not* needing a fix — left here as a durable record instead of only living in review transcripts, so a future reader can see they were considered and consciously deferred, not missed.
+
+**Task 1 — token helpers**
+- `verifyToken`'s generic cast does no runtime shape validation on the decoded JSON payload before returning it as `T`. Inherited from the pre-existing `digest.ts` logic this was extracted from, not a regression. Now has two independent consumers (`ApproveTokenPayload`, `ConfirmTokenPayload`) sharing the same unchecked trust boundary — worth a lightweight runtime guard (`typeof payload === 'object' && typeof payload.exp === 'number'`) if a third consumer is ever added.
+
+**Task 4 — confirmation email**
+- `List-Unsubscribe` header is mailto-only, no HTTPS one-click URL or `List-Unsubscribe-Post` (RFC 8058). Matters for bulk marketing sends under Gmail/Yahoo's 2024 requirements; low risk for this low-volume transactional confirmation email.
+- No `<meta charset>`/`<html lang>` in the email HTML — Resend sets `Content-Type: text/html; charset=UTF-8` at the transport layer regardless.
+- `hello@tradieintel.com.au` is a duplicated literal across `confirmation-email.ts` and `digest.ts` rather than a shared constant.
+
+**Task 5 — confirmation handler**
+- IP is read from `x-forwarded-for` rather than Vercel's own `x-vercel-forwarded-for`. Correct today (Vercel strips client-supplied `x-forwarded-for` at the edge by default) but contingent on no additional proxy/CDN ever sitting in front of Vercel — a DNS-level change invisible to a code review. `x-vercel-forwarded-for` would remove that dependency.
+- `payload.scope`'s runtime-validation gap (see Task 1 above) is mitigated in practice here: a garbage scope value would hit the `check (scope in (...))` constraint on `subscriber_consents` and surface as a thrown, propagated error rather than silently corrupting data.
+
+**Task 6 — rate limiting**
+- The `subscribe_attempts` sweep only runs on the allow-and-write path; a sustained failure mode where every request hits the fail-open catch block (no inserts happening either) would mean the table isn't swept during that window. Self-heals on the next successful write. Revisit with a scheduled cleanup if write reliability ever becomes a live concern.
+- No integration test asserts the query shape (`select`/`.gte`/`.or`) against the real `subscribe_attempts` schema — covered instead by the live Task 9 E2E run, not by an automated test.
+
+**Task 7 — subscribe endpoint**
+- **Response-timing side channel:** the three 200-returning branches (honeypot, rate-limited, genuine success) are identical in status and body but not in latency — a real send involves a live Resend HTTP call the other two paths don't make. Reviewed and deliberately not fixed: this is a public newsletter opt-in, not an auth/account-existence boundary, and no subscription completes without a real inbox click regardless. Artificial latency-equalization was assessed as not worth the complexity for this threat model.
+- **No-CAPTCHA email-bombing ceiling:** `address_window` rate-limits per email hash across all IPs, so a single attacker can still trigger one real Resend send to an arbitrary non-consenting address roughly every 15 minutes indefinitely (~96/day). Bounded (no subscription completes without a click) and Cloudflare Turnstile is already the named next increment below — this is the concrete reason to prioritise it once traffic volume makes the nuisance cost worth addressing.
+- 502-on-send-failure has no retry path; a transient Resend blip means the user must resubmit, which consumes another rate-limit slot. Accepted as a reasonable trade-off rather than building a retry queue for this task's scope.
+
+---
+
 ## Post-implementation
 
 Once live, two follow-ups sit outside this plan and are tracked in spec §7 and §8:
