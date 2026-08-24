@@ -124,6 +124,7 @@ export async function selectArticles(opts: {
       .not('ai_summary', 'is', null)
       .gte('published_at', cutoff)
       .order('relevance_score', { ascending: false })
+      .order('published_at', { ascending: false })
       .limit(20);
 
     if (excludeIds.length > 0) {
@@ -240,7 +241,7 @@ export function buildQaEmailHtml(opts: {
   const startLabel = formatShortDate(opts.dateRange.start);
   const endLabel = formatShortDate(opts.dateRange.end);
   const articleList = opts.articles
-    .map((a, i) => `<li style="margin-bottom:8px;"><strong>${i + 1}. ${escapeHtml(a.title)}</strong> - ${escapeHtml(a.source)} (score: ${a.relevance_score})</li>`)
+    .map(a => `<li style="margin-bottom:8px;"><strong>${escapeHtml(a.title)}</strong> - ${escapeHtml(a.source)} (score: ${a.relevance_score})</li>`)
     .join('');
 
   return `<!DOCTYPE html>

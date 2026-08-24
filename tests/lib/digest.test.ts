@@ -163,6 +163,35 @@ describe('selectArticles', () => {
     const idExclusionCall = notCalls.find((c: unknown[]) => c[0] === 'id');
     expect(idExclusionCall).toBeFalsy();
   });
+
+  it('orders by relevance_score then published_at so tied scores break deterministically', async () => {
+    vi.resetModules();
+    const { selectArticles } = await import('@/lib/digest');
+    const items = Array.from({ length: 5 }, (_, i) => makeItem({ id: `uuid-${i}` }));
+
+    const mockChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: items, error: null }),
+      in: vi.fn().mockReturnThis()
+    };
+
+    const supa = {
+      from: vi.fn().mockReturnValue(mockChain)
+    } as unknown as SupabaseClient;
+    await selectArticles({ supabase: supa });
+
+    // Enrichment scores bunch heavily - a whole week can land on one value - and
+    // without a secondary key Postgres returns ties in unspecified order, making
+    // the "top 5" arbitrary rather than editorial. Newest must win a tie.
+    expect(mockChain.order.mock.calls).toEqual([
+      ['relevance_score', { ascending: false }],
+      ['published_at', { ascending: false }]
+    ]);
+  });
 });
 
 describe('hasRecentDigestRun', () => {
@@ -469,5 +498,66 @@ describe('buildDigestSections', () => {
     expect(sections).toHaveLength(3);
     expect((sections[0] as { type: string }).type).toBe('header');
     expect((sections[sections.length - 1] as { type: string }).type).toBe('footer');
+  });
+});
+
+
+// ── QA approval email ────────────────────────────────────────────────────────
+
+describe('buildQaEmailHtml', () => {
+  const baseOpts = {
+    dateRange: { start: new Date('2026-08-17T00:00:00Z'), end: new Date('2026-08-24T00:00:00Z') },
+    approveUrl: 'https://tradieintel.com.au/api/digest/approve?token=abc.def',
+    runId: '9318c32b-7f00-4a39-97cd-ccd4be4181a5'
+  };
+
+  it('does not prefix titles with an index - the <ol> already numbers them', async () => {
+    const { buildQaEmailHtml } = await import('@/lib/digest');
+    const articles = Array.from({ length: 3 }, (_, i) =>
+      makeItem({ id: `uuid-${i}`, title: `Article ${i}` })
+    );
+    const html = buildQaEmailHtml({ ...baseOpts, articles });
+
+    // Regression: a hardcoded `${i + 1}.` inside the <li> rendered as "1. 1. Title"
+    // because the list is already an <ol>. Numbering comes from the HTML only.
+    expect(html).toContain('<strong>Article 0</strong>');
+    expect(html).not.toMatch(/<strong>\d+\.\s/);
+  });
+
+  it('renders one <li> per article inside a single <ol>', async () => {
+    const { buildQaEmailHtml } = await import('@/lib/digest');
+    const articles = Array.from({ length: 4 }, (_, i) => makeItem({ id: `uuid-${i}` }));
+    const html = buildQaEmailHtml({ ...baseOpts, articles });
+
+    expect(html.match(/<li /g) ?? []).toHaveLength(4);
+    expect(html.match(/<ol>/g) ?? []).toHaveLength(1);
+    expect(html).toContain('<strong>Articles selected (4):</strong>');
+  });
+
+  it('includes source and relevance score for each article', async () => {
+    const { buildQaEmailHtml } = await import('@/lib/digest');
+    const html = buildQaEmailHtml({
+      ...baseOpts,
+      articles: [makeItem({ source: 'HIA News', relevance_score: 72 })]
+    });
+    expect(html).toContain('HIA News (score: 72)');
+  });
+
+  it('escapes HTML in titles and sources', async () => {
+    const { buildQaEmailHtml } = await import('@/lib/digest');
+    const html = buildQaEmailHtml({
+      ...baseOpts,
+      articles: [makeItem({ title: '<script>alert("x")</script>', source: 'A & B' })]
+    });
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('A &amp; B');
+  });
+
+  it('includes the approve URL and run ID', async () => {
+    const { buildQaEmailHtml } = await import('@/lib/digest');
+    const html = buildQaEmailHtml({ ...baseOpts, articles: [makeItem()] });
+    expect(html).toContain(baseOpts.approveUrl.replace(/&/g, '&amp;'));
+    expect(html).toContain(baseOpts.runId);
   });
 });
