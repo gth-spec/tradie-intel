@@ -5,6 +5,8 @@
 //   2. GET /campaigns/{id} → get bound template id + version
 //   3. PATCH /templates/{boundTemplateId} → set content (if_version required)
 //   4. PATCH /campaigns/{id} → set audience (trigger_attributes only; NO template_id)
+//   5. POST /campaigns/{id}/send → requires expected_campaign_updated_at (added
+//      upstream after the probe; see sendNitrosendCampaign)
 // Note: campaign auto-creates its own bound template; do NOT create a standalone
 //       template and do NOT PATCH template_id onto the campaign.
 
@@ -196,14 +198,48 @@ export async function reconcileNitrosendList(
  * Sends a NitroSend campaign immediately.
  * POST /campaigns/{campaignId}/send
  */
+/**
+ * Sends a campaign live.
+ *
+ * NitroSend guards /send with optimistic concurrency: the request must carry
+ * `expected_campaign_updated_at` matching the campaign's persisted `updated_at`
+ * exactly, or it returns 422. This was NOT required when the send sequence was
+ * probed (docs/nitrosend-api-probe.md, 2026-06-20, step 5 was a bodyless POST) -
+ * it is an upstream API change.
+ *
+ * The timestamp is read here, immediately before the send, rather than captured
+ * at campaign creation. The digest cron creates the campaign on Tuesday and the
+ * approver may not click through for days, so a creation-time value would be
+ * stale by the time it is used.
+ *
+ * The value is passed through verbatim as the string the API returned. Do not
+ * round-trip it through `new Date()` - re-serialising changes precision and
+ * offset format, and the API compares against the exact persisted timestamp.
+ */
 export async function sendNitrosendCampaign(
   apiKey: string,
   campaignId: string
 ): Promise<void> {
+  const getRes = await fetch(`${BASE_URL}/campaigns/${campaignId}`, {
+    method: 'GET',
+    headers: headers(apiKey)
+  });
+  if (!getRes.ok) {
+    throw new Error(`Nitrosend campaign get error: ${getRes.status} ${await getRes.text()}`);
+  }
+  const campaign = await getRes.json() as { updated_at?: unknown };
+  const updatedAt = campaign.updated_at;
+  if (typeof updatedAt !== 'string' || updatedAt.length === 0) {
+    throw new Error(
+      `Nitrosend campaign ${campaignId} returned no usable updated_at; ` +
+      `cannot satisfy the send concurrency check. Got: ${JSON.stringify(updatedAt)}`
+    );
+  }
+
   const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/send`, {
     method: 'POST',
     headers: headers(apiKey),
-    body: JSON.stringify({})
+    body: JSON.stringify({ expected_campaign_updated_at: updatedAt })
   });
   if (!res.ok) {
     throw new Error(`Nitrosend campaign send error: ${res.status} ${await res.text()}`);

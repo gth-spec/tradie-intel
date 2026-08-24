@@ -19,7 +19,7 @@ A campaign **auto-creates its own bound template**; you edit *that*, not a stand
 2. Read the bound template from `GET /campaigns/{id}` → `template.id` and `template.version` (fresh campaigns: empty `design`, `version: 1`).
 3. `PATCH /templates/{boundTemplateId}` body `{ "subject": "...", "preheader": "...", "if_version": <currentVersion>, "design": { "version": 2, "theme": {}, "sections": [ <header>, <text…>, <footer> ] } }` → sets content; bumps `version`. **`if_version` is REQUIRED** (optimistic concurrency).
 4. `PATCH /campaigns/{id}` body `{ "trigger_attributes": { "event": "manual", "audience_type": "lists", "contact_list_ids": [265] } }` → sets audience. (Send audience-only; do NOT include `template_id`.)
-5. Send: `POST /campaigns/{id}/send` (live). Test: `POST /campaigns/{id}/send_test` body `{ "send_test_to": ["addr", ...] }` → `{ "sent": n, "results": [{email, success}] }` — **verified end-to-end to a Gmail seed via managed SES.**
+5. Send: `POST /campaigns/{id}/send` (live) body `{ "expected_campaign_updated_at": "<campaign.updated_at>" }`. **Changed upstream after this probe** (observed 2026-08-24): a bodyless POST now returns `422 expected_campaign_updated_at must be the exact persisted campaign timestamp`. Read `updated_at` from `GET /campaigns/{id}` immediately before sending and pass the string verbatim - the cron creates the campaign days before the approver clicks, so a creation-time value is stale, and re-serialising through `Date` changes precision/offset and fails the equality check. Test: `POST /campaigns/{id}/send_test` body `{ "send_test_to": ["addr", ...] }` → `{ "sent": n, "results": [{email, success}] }` — **verified end-to-end to a Gmail seed via managed SES.**
 
 So `createNitrosendCampaign` (Task 3) = steps 1→4 returning `campaignId`; `sendNitrosendCampaign` = step 5. The plan's Task-3 skeleton (separate `POST /templates` + PATCH campaign `template_id`) is **superseded by the above** — use the campaign's bound template.
 
@@ -30,4 +30,5 @@ So `createNitrosendCampaign` (Task 3) = steps 1→4 returning `campaignId`; `sen
 - **Rate limit: 2 requests/sec.** Space calls (a burst caused duplicate-domain entries earlier in the saga).
 - **No campaign DELETE** (campaigns: GET/POST/PATCH/send only). Task 6 cleanup = mark `digest_runs` row `expired` in our DB; optionally `PATCH /campaigns/{id} {status:"cancelled"}` if needed (not required).
 - **Template update needs `if_version`**; a stale token returns `409`.
+- **Campaign send needs `expected_campaign_updated_at`** (added upstream after the 2026-06-20 probe); a wrong or missing value returns `422`.
 - Probe artifacts left in the account (harmless, no API delete): standalone template 2546, campaigns 790/793/940. List 265 is clean.

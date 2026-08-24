@@ -499,27 +499,101 @@ describe('sendNitrosendCampaign', () => {
     vi.resetModules();
   });
 
-  it('POSTs to /campaigns/{id}/send with empty body and Bearer auth', async () => {
+  const UPDATED_AT = '2026-08-24T21:00:59.123456Z';
+
+  function mockCampaignGet(updatedAt: unknown = UPDATED_AT) {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 42, status: 'draft', updated_at: updatedAt }), { status: 200 })
+    );
+  }
+
+  it('GETs the campaign then POSTs /send with expected_campaign_updated_at', async () => {
+    mockCampaignGet();
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     await sendNitrosendCampaign(API_KEY, '42');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const [getUrl, getInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(getUrl).toBe(`${BASE}/campaigns/42`);
+    expect(getInit.method).toBe('GET');
+
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(url).toBe(`${BASE}/campaigns/42/send`);
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${API_KEY}`);
-    expect(JSON.parse(init.body as string)).toEqual({});
+    expect(JSON.parse(init.body as string)).toEqual({ expected_campaign_updated_at: UPDATED_AT });
+  });
+
+  it('passes updated_at through verbatim without re-serialising it', async () => {
+    // The API compares against the exact persisted timestamp. Round-tripping
+    // through Date would normalise precision and offset and fail the check.
+    const odd = '2026-08-24T21:00:59.123456+00:00';
+    mockCampaignGet(odd);
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    await sendNitrosendCampaign(API_KEY, '42');
+
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).expected_campaign_updated_at).toBe(odd);
+  });
+
+  it('reads updated_at at send time, not from a caller-held value', async () => {
+    // The cron creates the campaign; the approver may click days later. The
+    // token must come from a fresh GET or it is stale on arrival.
+    mockCampaignGet('2026-08-31T06:59:00.000000Z');
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    await sendNitrosendCampaign(API_KEY, '42');
+
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).expected_campaign_updated_at)
+      .toBe('2026-08-31T06:59:00.000000Z');
+  });
+
+  it('throws a legible error when the campaign has no usable updated_at', async () => {
+    // Body with the key absent entirely - not via mockCampaignGet(undefined),
+    // which would hit the helper's default parameter and queue a valid value.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 42, status: 'draft' }), { status: 200 })
+    );
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    await expect(sendNitrosendCampaign(API_KEY, '42'))
+      .rejects.toThrow('returned no usable updated_at');
+    // Must not attempt the send with a bad token.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when the pre-send campaign GET fails', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('Not found', { status: 404 }));
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    await expect(sendNitrosendCampaign(API_KEY, '42'))
+      .rejects.toThrow('Nitrosend campaign get error: 404');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('throws on non-2xx', async () => {
+    mockCampaignGet();
     fetchMock.mockResolvedValueOnce(new Response('Bad request', { status: 400 }));
     const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     await expect(sendNitrosendCampaign(API_KEY, '42'))
       .rejects.toThrow('Nitrosend campaign send error: 400');
   });
 
+  it('surfaces the 422 concurrency rejection text', async () => {
+    mockCampaignGet();
+    fetchMock.mockResolvedValueOnce(new Response(
+      '{"code":422,"message":"expected_campaign_updated_at must be the exact persisted campaign timestamp","error":true}',
+      { status: 422 }
+    ));
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    await expect(sendNitrosendCampaign(API_KEY, '42'))
+      .rejects.toThrow('expected_campaign_updated_at must be the exact persisted campaign timestamp');
+  });
+
   it('resolves void on success', async () => {
+    mockCampaignGet();
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     const result = await sendNitrosendCampaign(API_KEY, '42');
