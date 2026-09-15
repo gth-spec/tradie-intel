@@ -48,6 +48,10 @@ export const GET: APIRoute = async ({ url }) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('NitroSend send-campaign failed for run', r.id, msg);
+    // A repeat click after a send that landed (but whose DB update failed) must not read as "failed".
+    if (msg.includes('duplicate_campaign_send')) {
+      return html(409, '<h2>Already sending</h2><p>NitroSend reports this digest is already sending or sent. Check the campaign in NitroSend before trying again.</p>');
+    }
     return html(502, `<h2>NitroSend send failed</h2><p>The digest was not sent. The approval link is still valid — try again or check NitroSend status.</p><p style="font-size:12px;color:#9ca3af;">Detail: ${escapeHtml(msg)}</p>`);
   }
 

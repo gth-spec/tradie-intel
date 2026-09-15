@@ -194,16 +194,32 @@ export async function reconcileNitrosendList(
 
 /**
  * Sends a NitroSend campaign immediately.
- * POST /campaigns/{campaignId}/send
+ * GET  /campaigns/{campaignId}      (read persisted updated_at + template version)
+ * POST /campaigns/{campaignId}/send (both values required since 2026-09)
  */
 export async function sendNitrosendCampaign(
   apiKey: string,
   campaignId: string
 ): Promise<void> {
+  const getRes = await fetch(`${BASE_URL}/campaigns/${campaignId}`, {
+    method: 'GET',
+    headers: headers(apiKey)
+  });
+  if (!getRes.ok) {
+    throw new Error(`Nitrosend campaigns get error: ${getRes.status} ${await getRes.text()}`);
+  }
+  const campaign = await getRes.json() as { updated_at: string; template: { version: number } };
+
+  // ponytail: fresh read at send time, so a dashboard edit made after the QA email
+  // ships unreviewed. Fine while Greg is the only editor; snapshot at draft time if that changes.
+  // updated_at is passed verbatim: re-serialising through Date can drift from the persisted value.
   const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/send`, {
     method: 'POST',
     headers: headers(apiKey),
-    body: JSON.stringify({})
+    body: JSON.stringify({
+      expected_campaign_updated_at: campaign.updated_at,
+      template_if_version: campaign.template.version
+    })
   });
   if (!res.ok) {
     throw new Error(`Nitrosend campaign send error: ${res.status} ${await res.text()}`);

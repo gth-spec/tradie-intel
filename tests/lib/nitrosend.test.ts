@@ -499,20 +499,41 @@ describe('sendNitrosendCampaign', () => {
     vi.resetModules();
   });
 
-  it('POSTs to /campaigns/{id}/send with empty body and Bearer auth', async () => {
+  const campaignGet = () => new Response(
+    JSON.stringify({ id: 42, updated_at: '2026-09-14T21:00:34.204Z', template: { id: 7, version: 2 } }),
+    { status: 200 }
+  );
+
+  it('reads the campaign then POSTs send with its exact updated_at and template version', async () => {
+    fetchMock.mockResolvedValueOnce(campaignGet());
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     await sendNitrosendCampaign(API_KEY, '42');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [getUrl, getInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(getUrl).toBe(`${BASE}/campaigns/42`);
+    expect(getInit.method).toBe('GET');
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(url).toBe(`${BASE}/campaigns/42/send`);
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${API_KEY}`);
-    expect(JSON.parse(init.body as string)).toEqual({});
+    expect(JSON.parse(init.body as string)).toEqual({
+      expected_campaign_updated_at: '2026-09-14T21:00:34.204Z',
+      template_if_version: 2
+    });
   });
 
-  it('throws on non-2xx', async () => {
+  it('throws on campaign read failure without sending', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('Not found', { status: 404 }));
+    const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
+    await expect(sendNitrosendCampaign(API_KEY, '42'))
+      .rejects.toThrow('Nitrosend campaigns get error: 404');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws on non-2xx send', async () => {
+    fetchMock.mockResolvedValueOnce(campaignGet());
     fetchMock.mockResolvedValueOnce(new Response('Bad request', { status: 400 }));
     const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     await expect(sendNitrosendCampaign(API_KEY, '42'))
@@ -520,6 +541,7 @@ describe('sendNitrosendCampaign', () => {
   });
 
   it('resolves void on success', async () => {
+    fetchMock.mockResolvedValueOnce(campaignGet());
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const { sendNitrosendCampaign } = await import('@/lib/nitrosend');
     const result = await sendNitrosendCampaign(API_KEY, '42');
