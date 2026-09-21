@@ -8,6 +8,7 @@ function item(o: Partial<FeedItem>): FeedItem {
     original_content: null, published_at: new Date().toISOString(),
     niche: 'trades', ai_summary: null, why_it_matters: null,
     relevance_score: 50, tags: [], slug: 's', created_at: new Date().toISOString(),
+    question_headline: null, key_stat: null, key_quote: null, key_takeaways: [],
     ...o
   };
 }
