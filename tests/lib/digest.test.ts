@@ -53,7 +53,7 @@ describe('signApproveToken / verifyApproveToken', () => {
 function makeItem(overrides: Partial<DigestItem> = {}): DigestItem {
   return {
     id: 'uuid-1',
-    title: 'Test Article',
+    title: `Test Article ${overrides.id ?? 'uuid-1'}`,
     ai_summary: 'A test summary.',
     why_it_matters: 'Matters to plumbers.',
     original_url: 'https://example.com/article',
@@ -63,6 +63,22 @@ function makeItem(overrides: Partial<DigestItem> = {}): DigestItem {
     ...overrides
   };
 }
+
+describe('dedupeByTitle', () => {
+  it('drops syndicated and prefixed copies, keeps the first', async () => {
+    const { dedupeByTitle } = await import('@/lib/digest');
+    const t = 'HIA warns tradie shortage is holding back housing delivery';
+    const m = 'Updated modelling: housing package estimated to cut 10,700 homes and push rents higher';
+    const out = dedupeByTitle([
+      makeItem({ id: 'a', title: t, source: 'Electrical Connection' }),
+      makeItem({ id: 'b', title: t, source: 'Plumbing Connection' }),
+      makeItem({ id: 'c', title: m }),
+      makeItem({ id: 'd', title: `JOINT STATEMENT – ${m}` }),
+      makeItem({ id: 'e', title: 'Tradies essential to deliver Queensland homes' })
+    ]);
+    expect(out.map(i => i.id)).toEqual(['a', 'c', 'e']);
+  });
+});
 
 describe('selectArticles', () => {
   it('returns top 5 articles when 5+ qualify in 7 days', async () => {

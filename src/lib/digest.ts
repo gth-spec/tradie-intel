@@ -134,13 +134,34 @@ export async function selectArticles(opts: {
     const { data, error } = await query as { data: unknown[] | null; error: { message: string } | null };
     if (error) throw error;
 
-    const items = (data ?? []) as DigestItem[];
+    const items = dedupeByTitle((data ?? []) as DigestItem[]);
     if (items.length >= 3) {
       return { articles: items.slice(0, 5), lookbackDays: days };
     }
   }
 
   return { articles: [], lookbackDays: 14 };
+}
+
+// Sister publications (e.g. Plumbing/Electrical Connection) syndicate the same
+// story, and peak bodies re-post joint statements with a prefix. Keep the
+// first (highest-ranked) copy of any title whose word set is ≥70% shared.
+// ponytail: O(n²) over ≤20 rows; title-only, so a rewritten headline slips through.
+function titleWords(t: string): Set<string> {
+  return new Set(t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+}
+
+export function dedupeByTitle(items: DigestItem[]): DigestItem[] {
+  const kept: { item: DigestItem; words: Set<string> }[] = [];
+  for (const item of items) {
+    const words = titleWords(item.title);
+    const dup = kept.some(k => {
+      const shared = [...words].filter(w => k.words.has(w)).length;
+      return shared / new Set([...words, ...k.words]).size >= 0.7;
+    });
+    if (!dup) kept.push({ item, words });
+  }
+  return kept.map(k => k.item);
 }
 
 // ── Email HTML builder ────────────────────────────────────────────────────────
