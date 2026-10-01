@@ -45,7 +45,7 @@ for (const key of required) {
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const model = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929';
+const model = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 
 // Character limits matching src/lib/claude.ts constants
 const MAX_QUESTION_HEADLINE_CHARS = 120;
@@ -80,7 +80,8 @@ Respond with JSON only.`;
 async function enrichGeoFields(title, content) {
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 512,
+    // Sonnet 5.5 thinks by default (adaptive) and thinking counts toward max_tokens.
+    max_tokens: 4000,
     messages: [{ role: 'user', content: buildGeoPrompt(title, content ?? title) }]
   });
 

@@ -112,11 +112,12 @@ export async function enrich(input: EnrichmentInput): Promise<Enrichment> {
   // (e.g. Trigger.dev). Optional-chain so the process.env fallback actually fires.
   const apiKey = (import.meta as any).env?.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
-  const model = ((import.meta as any).env?.CLAUDE_MODEL ?? process.env.CLAUDE_MODEL) || 'claude-sonnet-4-6';
+  const model = ((import.meta as any).env?.CLAUDE_MODEL ?? process.env.CLAUDE_MODEL) || 'claude-sonnet-5-5';
 
   const createParams = {
     model,
-    max_tokens: 1024,
+    // Sonnet 5.5 thinks by default (adaptive) and thinking counts toward max_tokens.
+    max_tokens: 4000,
     messages: [{ role: 'user' as const, content: enrichmentPrompt(input) }]
   };
 

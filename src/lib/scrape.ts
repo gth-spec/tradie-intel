@@ -23,7 +23,7 @@ export interface ScrapedItem {
 
 const CONTENT_CAP = 500;
 const FIRECRAWL_ENDPOINT = 'https://api.firecrawl.dev/v1/scrape';
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_MODEL = 'claude-sonnet-5-5';
 
 const ExtractedArticleSchema = z.object({
   title: z.string().min(1),
@@ -108,7 +108,8 @@ export async function scrapeSource(
     const model = env('CLAUDE_MODEL') || DEFAULT_MODEL;
     const response: any = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      // Sonnet 5.5 thinks by default (adaptive) and thinking counts toward max_tokens.
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',

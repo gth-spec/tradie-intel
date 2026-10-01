@@ -25,7 +25,7 @@ const FEEDS = [
 ];
 
 const FIRECRAWL_ENDPOINT = 'https://api.firecrawl.dev/v1/scrape';
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_MODEL = 'claude-sonnet-5-5';
 
 const EXTRACTION_PROMPT = `You are extracting recent news articles from a scraped news/index page for an Australian trades industry feed (plumbers, electricians, builders, allied trades).
 
@@ -85,7 +85,8 @@ async function verifyOne(feed) {
   try {
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL || DEFAULT_MODEL,
-      max_tokens: 4096,
+      // Sonnet 5.5 thinks by default (adaptive) and thinking counts toward max_tokens.
+      max_tokens: 16000,
       messages: [{ role: 'user', content: EXTRACTION_PROMPT.replace('{{MARKDOWN}}', markdown) }]
     });
     const textBlock = response.content?.find(b => b.type === 'text');

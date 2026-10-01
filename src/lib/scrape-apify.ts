@@ -17,7 +17,7 @@ import { type ScrapedItem } from '@/lib/scrape';
 const CONTENT_CAP = 500;
 const APIFY_ENDPOINT =
   'https://api.apify.com/v2/acts/apify~website-content-crawler/run-sync-get-dataset-items';
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_MODEL = 'claude-sonnet-5-5';
 
 const ExtractedArticleSchema = z.object({
   title: z.string().min(1),
@@ -107,7 +107,8 @@ export async function scrapeSourceApify(
     const model = env('CLAUDE_MODEL') || DEFAULT_MODEL;
     const response: any = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      // Sonnet 5.5 thinks by default (adaptive) and thinking counts toward max_tokens.
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',
