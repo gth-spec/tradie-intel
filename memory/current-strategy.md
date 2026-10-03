@@ -11,7 +11,7 @@ Tradie Intel is a trades-niche micro-site (tradieintel.com.au) that aggregates i
 - tradieintel.au - 301 redirect → tradieintel.com.au ✅ live
 
 **AgentMail inboxes (free tier, all created):**
-- tradieintel-monitor@agentmail.to - source monitoring (low priority)
+- ~~tradieintel-monitor@agentmail.to~~ - DELETED 2026-10-03 (0 messages ever; slot freed for throwaway research inboxes, plan cap is 3). Recreate if source monitoring is ever built.
 - tradieintel-qa@agentmail.to - digest QA approval step
 - tradieintel-triage@agentmail.to - reader replies (post-digest launch)
 
