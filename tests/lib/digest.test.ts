@@ -80,6 +80,32 @@ describe('dedupeByTitle', () => {
   });
 });
 
+describe('dedupeByStory', () => {
+  const items = () => [
+    makeItem({ id: 'a', title: 'Government provides breathing space for builders on ATO credit card ban' }),
+    makeItem({ id: 'b', title: 'CO2 heat pumps in aged care' }),
+    makeItem({ id: 'c', title: 'Government delays ATO credit card payment changes' })
+  ];
+  const fake = (text: string) => ({
+    messages: { create: vi.fn().mockResolvedValue({ content: [{ type: 'text', text }] }) }
+  }) as any;
+
+  it('keeps the chosen item per story, in rank order', async () => {
+    const { dedupeByStory } = await import('@/lib/digest');
+    const out = await dedupeByStory(items(), fake('{"keep": [2, 1]}'));
+    expect(out.map(i => i.id)).toEqual(['b', 'c']);
+  });
+
+  it('falls back to the input on bad output or API error', async () => {
+    const { dedupeByStory } = await import('@/lib/digest');
+    for (const text of ['not json', '{"keep": []}', '{"keep": [0, 9]}', '{"keep": [1, 1]}']) {
+      expect((await dedupeByStory(items(), fake(text))).map(i => i.id)).toEqual(['a', 'b', 'c']);
+    }
+    const boom = { messages: { create: vi.fn().mockRejectedValue(new Error('timeout')) } } as any;
+    expect((await dedupeByStory(items(), boom)).map(i => i.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
 describe('selectArticles', () => {
   it('returns top 5 articles when 5+ qualify in 7 days', async () => {
     vi.resetModules();

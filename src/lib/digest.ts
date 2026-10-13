@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import Anthropic from '@anthropic-ai/sdk';
 // Used by article selection functions added in later tasks.
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -134,7 +135,7 @@ export async function selectArticles(opts: {
     const { data, error } = await query as { data: unknown[] | null; error: { message: string } | null };
     if (error) throw error;
 
-    const items = dedupeByTitle((data ?? []) as DigestItem[]);
+    const items = await dedupeByStory(dedupeByTitle((data ?? []) as DigestItem[]));
     if (items.length >= 3) {
       return { articles: items.slice(0, 5), lookbackDays: days };
     }
@@ -162,6 +163,65 @@ export function dedupeByTitle(items: DigestItem[]): DigestItem[] {
     if (!dup) kept.push({ item, words });
   }
   return kept.map(k => k.item);
+}
+
+// A source often issues several releases on one story under different
+// headlines (HIA's two "ATO credit card delay" releases, 2026-10-13), which
+// dedupeByTitle can't see. One Haiku call groups candidates by story and keeps
+// the most current item of each. Any failure falls back to the input so the
+// digest never blocks on it.
+// ponytail: plain SDK client, no PostHog wrapper; one call a week isn't worth tracing.
+export function storyDedupePrompt(items: DigestItem[]): string {
+  const list = items
+    .map((a, i) => `[${i}] ${a.title} (${a.source}, ${a.published_at.slice(0, 10)})\n${a.ai_summary}`)
+    .join('\n\n');
+  return `Below are candidate news items for a weekly Australian trades newsletter, ranked best first.
+
+Some may cover the same news story under different headlines: two releases on the same announcement, or an earlier item that a later item in the list has superseded (e.g. "body calls for X to be reversed" then "government delays X"). Treat those as one story.
+
+For each story keep exactly ONE item: the one with the most current and concrete information (if equal, the one listed first). Keep every item that is a different story.
+
+Respond with JSON only, no prose: {"keep": [<indices of items to keep>]}
+
+${list}`;
+}
+
+export function applyStoryKeep(items: DigestItem[], text: string): DigestItem[] {
+  const parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '').trim()) as { keep?: unknown };
+  const keep = parsed.keep;
+  if (!Array.isArray(keep) || keep.length === 0) throw new Error('keep must be a non-empty array');
+  const idx = new Set<number>();
+  for (const k of keep) {
+    if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= items.length || idx.has(k as number)) {
+      throw new Error(`bad keep index: ${JSON.stringify(k)}`);
+    }
+    idx.add(k as number);
+  }
+  return items.filter((_, i) => idx.has(i));
+}
+
+export async function dedupeByStory(
+  items: DigestItem[],
+  client?: Pick<Anthropic, 'messages'>
+): Promise<DigestItem[]> {
+  if (items.length < 2) return items;
+  const apiKey = (import.meta as any).env?.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  if (!client && !apiKey) return items;
+  try {
+    const c = client ?? new Anthropic({ apiKey, timeout: 20_000, maxRetries: 1 });
+    const res = await c.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      messages: [{ role: 'user', content: storyDedupePrompt(items) }]
+    });
+    const text = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text).join('');
+    return applyStoryKeep(items, text);
+  } catch (e) {
+    console.warn('Story dedupe failed, using title-deduped list:', e);
+    return items;
+  }
 }
 
 // ── Email HTML builder ────────────────────────────────────────────────────────
